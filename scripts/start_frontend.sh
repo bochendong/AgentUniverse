@@ -1,0 +1,47 @@
+#!/bin/bash
+
+# Start Frontend Development Server Script
+# This script starts the Vite frontend development server
+
+set -e
+
+# Get the script directory and project root
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
+FRONTEND_DIR="$PROJECT_ROOT/frontend"
+
+echo "🚀 Starting Frontend Development Server..."
+echo "📍 Project Root: $PROJECT_ROOT"
+echo "📍 Frontend Dir: $FRONTEND_DIR"
+
+# Check if frontend directory exists
+if [ ! -d "$FRONTEND_DIR" ]; then
+    echo "❌ Error: Frontend directory not found at $FRONTEND_DIR"
+    exit 1
+fi
+
+# Check if node_modules exists
+if [ ! -d "$FRONTEND_DIR/node_modules" ]; then
+    echo "📦 Installing frontend dependencies..."
+    cd "$FRONTEND_DIR"
+    npm install
+    echo "✅ Dependencies installed"
+fi
+
+# Check if .env file exists, create one if not
+if [ ! -f "$FRONTEND_DIR/.env" ] && [ ! -f "$FRONTEND_DIR/.env.local" ]; then
+    echo "📝 Creating .env file..."
+    cat > "$FRONTEND_DIR/.env" << EOF
+# Backend API URL
+VITE_API_URL=http://localhost:8000
+EOF
+    echo "✅ .env file created with default API URL: http://localhost:8000"
+fi
+
+# Start the development server
+echo "🌟 Starting Vite development server on http://localhost:3001"
+echo "   Frontend will proxy /api requests to http://localhost:8000"
+echo ""
+
+cd "$FRONTEND_DIR"
+npm run dev

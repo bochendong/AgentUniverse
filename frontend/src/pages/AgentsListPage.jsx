@@ -1,0 +1,120 @@
+import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import {
+  Container,
+  Box,
+  Typography,
+  Grid,
+  CircularProgress,
+  Alert,
+} from '@mui/material'
+import {
+  ArrowBack as BackIcon,
+} from '@mui/icons-material'
+import { listAgents } from '../api/client'
+import AgentCard from '../components/AgentCard'
+
+/**
+ * Agents List Page - 苹果风格
+ * 显示所有agents的列表，每个agent是一个neon edge card
+ */
+function AgentsListPage() {
+  const navigate = useNavigate()
+  const [agents, setAgents] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  const loadAgents = async () => {
+    try {
+      setLoading(true)
+      const response = await listAgents()
+      setAgents(response.data || [])
+    } catch (err) {
+      console.error('Failed to load agents:', err)
+      setError(err.response?.data?.detail || 'Failed to load agents')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadAgents()
+  }, [])
+
+  const handleDelete = (deletedNotebookId) => {
+    // 从列表中移除已删除的agent
+    setAgents(agents.filter(agent => agent.notebook_id !== deletedNotebookId))
+  }
+
+  if (loading) {
+    return (
+      <Box
+        sx={{
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          bgcolor: '#F5F5F7',
+        }}
+      >
+        <CircularProgress />
+      </Box>
+    )
+  }
+
+  return (
+    <Box
+      sx={{
+        width: '100%',
+        height: '100%',
+        bgcolor: '#F5F5F7',
+        overflowY: 'auto',
+        overflowX: 'hidden',
+      }}
+    >
+      <Container maxWidth="xl" sx={{ py: 4 }}>
+
+        {error && (
+          <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
+            {error}
+          </Alert>
+        )}
+
+        {agents.length === 0 ? (
+          <Box
+            sx={{
+              textAlign: 'center',
+              py: 8,
+              bgcolor: 'white',
+              borderRadius: 3,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+            }}
+          >
+            <Typography variant="h6" sx={{ color: '#86868B', mb: 1 }}>
+              No agents found
+            </Typography>
+            <Typography variant="body2" sx={{ color: '#86868B' }}>
+              Create a notebook to get started
+            </Typography>
+          </Box>
+        ) : (
+          <Grid container spacing={3}>
+            {agents.map((agent) => (
+              <Grid item xs={12} sm={6} md={4} lg={3} key={agent.id}>
+                <AgentCard
+                  agent={agent}
+                  onClick={() => navigate(`/agents/${agent.notebook_id}`)}
+                  onDelete={handleDelete}
+                />
+              </Grid>
+            ))}
+          </Grid>
+        )}
+      </Container>
+    </Box>
+  )
+}
+
+export default AgentsListPage
+
