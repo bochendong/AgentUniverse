@@ -43,7 +43,11 @@ import {
   getSessionConversations,
   deleteSession,
   uploadFile,
+  confirmOutlineAndCreateNotebook,
+  reviseOutline,
+  getSessionTracing,
 } from '../api/client'
+import OutlineConfirmation from '../components/OutlineConfirmation'
 
 /**
  * Chat Page - OpenAI风格
@@ -60,6 +64,10 @@ function ChatPage() {
   const [loading, setLoading] = useState(true)
   const [inputMessage, setInputMessage] = useState('')
   const [uploadedFile, setUploadedFile] = useState(null) // { path: string, name: string }
+  const [pendingOutline, setPendingOutline] = useState(null) // { outline: object, userRequest: string, filePath: string }
+  const [creatingNotebook, setCreatingNotebook] = useState(false)
+  const [currentActivity, setCurrentActivity] = useState(null) // Current agent activity from tracing
+  const tracingPollIntervalRef = useRef(null)
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -71,6 +79,42 @@ function ChatPage() {
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  // Poll tracing information when sending
+  useEffect(() => {
+    if (sending && currentSessionId) {
+      // Start polling
+      const pollTracing = async () => {
+        try {
+          const response = await getSessionTracing(currentSessionId)
+          const currentActivity = response.data.current_activity
+          if (currentActivity) {
+            setCurrentActivity(currentActivity)
+          }
+        } catch (err) {
+          console.error('Failed to poll tracing:', err)
+        }
+      }
+
+      // Poll immediately and then every 500ms
+      pollTracing()
+      tracingPollIntervalRef.current = setInterval(pollTracing, 500)
+    } else {
+      // Stop polling
+      if (tracingPollIntervalRef.current) {
+        clearInterval(tracingPollIntervalRef.current)
+        tracingPollIntervalRef.current = null
+      }
+      // Clear current activity after a delay
+      setTimeout(() => setCurrentActivity(null), 1000)
+    }
+
+    return () => {
+      if (tracingPollIntervalRef.current) {
+        clearInterval(tracingPollIntervalRef.current)
+      }
+    }
+  }, [sending, currentSessionId])
 
   // 加载会话列表
   const loadSessions = async () => {
@@ -193,6 +237,9 @@ function ChatPage() {
       }
     }
 
+    // 保存文件路径信息（在清空前）
+    const savedFilePath = uploadedFile?.path || null
+
     setInputMessage('')
     setUploadedFile(null) // 清空上传的文件信息
     setSending(true)
@@ -208,11 +255,40 @@ function ChatPage() {
       const response = await chatWithTopLevelAgent(userMessage, sessionId)
       const agentResponse = response.data.response
 
-      // 添加 agent 回复
+      // 检测是否是大纲确认消息（尝试从JSON代码块中提取）
+      let outline = null
+      try {
+        // 尝试从JSON代码块中提取大纲
+        const jsonMatch = agentResponse.match(/```json\s*([\s\S]*?)\s*```/)
+        if (jsonMatch) {
+          const outlineData = JSON.parse(jsonMatch[1])
+          outline = outlineData
+        }
+      } catch (err) {
+        // JSON解析失败，尝试文本解析
+        outline = parseOutlineFromMessage(agentResponse)
+      }
+      
+      if (outline) {
+        // 这是大纲确认消息，显示确认UI
+        setPendingOutline({
+          outline: outline,
+          userRequest: userMessage,
+          filePath: savedFilePath,
+        })
+        // 添加消息到对话中（但不显示JSON部分）
+        const displayResponse = agentResponse.replace(/```json\s*[\s\S]*?\s*```/g, '').trim()
+        setMessages([
+          ...newMessages,
+          { role: 'assistant', content: displayResponse },
+        ])
+      } else {
+        // 普通消息，添加到对话中
       setMessages([
         ...newMessages,
         { role: 'assistant', content: agentResponse },
       ])
+      }
 
       // 刷新会话列表
       await loadSessions()
@@ -241,6 +317,163 @@ function ChatPage() {
 
   const handleFileUpload = () => {
     fileInputRef.current?.click()
+  }
+
+  // 从消息中解析大纲
+  const parseOutlineFromMessage = (message) => {
+    // 检测是否包含大纲确认标记
+    if (!message.includes('📋') && !message.includes('大纲已生成')) {
+      return null
+    }
+
+    try {
+      // 尝试从markdown格式的消息中提取大纲
+      // 匹配 "**标题**：{title}" 或 "**标题**：{title}"
+      const titleMatch = message.match(/\*\*标题\*\*[：:]\s*(.+?)(?:\n|$)/m)
+      if (!titleMatch) {
+        return null
+      }
+
+      const notebook_title = titleMatch[1].trim()
+      
+      // 匹配描述（可能在标题之后，章节之前）
+      const descMatch = message.match(/\*\*描述\*\*[：:]\s*([\s\S]+?)(?:\*\*章节\*\*|\n\*\*\d+\.|请确认|$)/m)
+      const notebook_description = descMatch ? descMatch[1].trim() : ''
+      
+      // 解析章节 - 匹配 "**1. 章节名**\n描述内容" 格式
+      const outlines = {}
+      // 先找到章节部分
+      const sectionsStart = message.indexOf('**章节**')
+      if (sectionsStart >= 0) {
+        const sectionsText = message.substring(sectionsStart)
+        // 匹配 "**数字. 章节名**\n描述"（描述可能有多行，直到下一个**数字.或结尾）
+        const sectionRegex = /\*\*(\d+)\.\s*(.+?)\*\*\s*\n([\s\S]*?)(?=\n\*\*\d+\.|请确认|$)/g
+        let match
+        while ((match = sectionRegex.exec(sectionsText)) !== null) {
+          const title = match[2].trim()
+          let description = match[3].trim()
+          // 移除末尾的省略号（如果有）
+          description = description.replace(/\.\.\.\s*$/, '').trim()
+          if (title && description) {
+            outlines[title] = description
+          }
+        }
+      }
+
+      if (Object.keys(outlines).length === 0) {
+        return null
+      }
+
+      return {
+        notebook_title,
+        notebook_description,
+        outlines,
+      }
+    } catch (err) {
+      console.error('Failed to parse outline:', err)
+      return null
+    }
+  }
+
+  // 处理大纲修订
+  const handleOutlineRevise = async (feedback) => {
+    if (!pendingOutline) return
+
+    setCreatingNotebook(true) // 使用这个状态表示正在处理
+    try {
+      const response = await reviseOutline(
+        pendingOutline.userRequest,
+        pendingOutline.outline,
+        feedback,
+        pendingOutline.filePath
+      )
+
+      // 更新pending outline为修订后的版本
+      setPendingOutline({
+        outline: response.data.outline,
+        userRequest: pendingOutline.userRequest,
+        filePath: pendingOutline.filePath,
+      })
+
+      // 添加修订消息到对话
+      setMessages([
+        ...messages,
+        {
+          role: 'assistant',
+          content: `根据您的反馈，我已经修改了大纲。\n\n${response.data.outline_info}`,
+        },
+      ])
+    } catch (err) {
+      setError(err.response?.data?.detail || '修改大纲失败')
+      console.error('Failed to revise outline:', err)
+    } finally {
+      setCreatingNotebook(false)
+    }
+  }
+
+  // 处理大纲确认
+  const handleOutlineConfirm = async (outline) => {
+    if (!pendingOutline) return
+
+    setCreatingNotebook(true)
+    
+    // 添加用户确认消息到界面
+    const confirmMessage = { role: 'user', content: '确认' }
+    setMessages([...messages, confirmMessage])
+    
+    try {
+      // 构建包含完整大纲信息的消息
+      // 将大纲 JSON 和文件路径包含在消息中，让 TopLevelAgent 能够提取
+      const outlineJson = JSON.stringify(outline, null, 2)
+      const confirmMessageWithOutline = `确认创建笔记本。
+
+**大纲信息（JSON格式）：**
+\`\`\`json
+${outlineJson}
+\`\`\`
+
+**文件路径：**
+${pendingOutline.filePath}
+
+请使用 create_notebook_from_outline 工具创建笔记本。`
+
+      // 发送消息给 TopLevelAgent（它会识别确认并调用工具）
+      const response = await chatWithTopLevelAgent(confirmMessageWithOutline, currentSessionId)
+      const agentResponse = response.data.response
+
+      // 添加 agent 回复到对话中
+      setMessages([
+        ...messages,
+        confirmMessage,
+        { role: 'assistant', content: agentResponse },
+      ])
+
+      // 清除pending outline
+      setPendingOutline(null)
+
+      // 刷新会话列表
+      await loadSessions()
+    } catch (err) {
+      setError(err.response?.data?.detail || '创建笔记本失败')
+      console.error('Failed to create notebook:', err)
+      // 恢复消息状态
+      setMessages(messages)
+    } finally {
+      setCreatingNotebook(false)
+    }
+  }
+
+  // 处理大纲取消
+  const handleOutlineCancel = () => {
+    setPendingOutline(null)
+    // 添加取消消息
+    setMessages([
+      ...messages,
+      {
+        role: 'assistant',
+        content: '已取消创建笔记本。',
+      },
+    ])
   }
 
   const handleFileChange = async (event) => {
@@ -618,6 +851,47 @@ function ChatPage() {
             },
           }}
         >
+          {/* Current Activity Indicator */}
+          {currentActivity && sending && (
+            <Box
+              sx={{
+                mb: 2,
+                p: 2,
+                borderRadius: '12px',
+                bgcolor: isDark ? 'rgba(59, 130, 246, 0.1)' : 'rgba(59, 130, 246, 0.05)',
+                border: `1px solid ${isDark ? 'rgba(59, 130, 246, 0.3)' : 'rgba(59, 130, 246, 0.2)'}`,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1.5,
+              }}
+            >
+              <CircularProgress size={16} sx={{ color: '#3b82f6' }} />
+              <Box sx={{ flex: 1 }}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontWeight: 600,
+                    color: isDark ? '#93c5fd' : '#1e40af',
+                    mb: 0.5,
+                  }}
+                >
+                  {currentActivity.agent_info?.name || 'Agent'} 正在处理...
+                </Typography>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: isDark ? '#9ca3af' : '#6b7280',
+                    fontSize: '0.75rem',
+                  }}
+                >
+                  {currentActivity.type === 'agent_run' 
+                    ? `处理消息: ${currentActivity.message?.substring(0, 50)}...`
+                    : currentActivity.message || '执行中...'}
+                </Typography>
+              </Box>
+            </Box>
+          )}
+
           {messages.length === 0 ? (
             <Box
               sx={{
@@ -653,6 +927,20 @@ function ChatPage() {
             </Box>
           ) : (
             <Box>
+              {/* Pending Outline Confirmation */}
+              {pendingOutline && (
+                <Box sx={{ mb: 2, px: { xs: 0, sm: 2 } }}>
+                  <OutlineConfirmation
+                    outline={pendingOutline.outline}
+                    onConfirm={handleOutlineConfirm}
+                    onCancel={handleOutlineCancel}
+                    onRevise={handleOutlineRevise}
+                    isCreating={creatingNotebook}
+                    isRevising={creatingNotebook}
+                  />
+                </Box>
+              )}
+
               {messages.map((message, index) => (
                 <Fade in key={index} timeout={300}>
                   <Box

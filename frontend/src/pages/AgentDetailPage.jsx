@@ -30,9 +30,13 @@ import rehypeRaw from 'rehype-raw'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { prism } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import 'katex/dist/katex.min.css'
-import { getAgent, getNotebook, getNotebookContent, getAgentHierarchy, splitNotebook } from '../api/client'
+import { getAgent, getNotebook, getNotebookContent, getAgentHierarchy, splitNotebook, getAgentParent } from '../api/client'
 import AgentAvatar from '../components/AgentAvatar'
 import NotebookContent from '../components/notebook/NotebookContent'
+import InstructionsEditorInline from '../components/InstructionsEditorInline'
+import HierarchyGraphView from '../components/HierarchyGraphView'
+import AgentToolsView from '../components/AgentToolsView'
+import AgentInstructionsView from '../components/AgentInstructionsView'
 
 /**
  * Parse agent_card text format to extract description and outline
@@ -108,9 +112,13 @@ function AgentDetailPage() {
   const [notebook, setNotebook] = useState(null)
   const [notebookContent, setNotebookContent] = useState(null)
   const [hierarchy, setHierarchy] = useState(null)
+  const [parentAgent, setParentAgent] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [splitting, setSplitting] = useState(false)
+  const [showAdvancedMode, setShowAdvancedMode] = useState(false)
+  const [selectedAgentId, setSelectedAgentId] = useState(null)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   useEffect(() => {
     const loadData = async () => {
@@ -127,10 +135,18 @@ function AgentDetailPage() {
         const isNotebookAgent = agentRes.data?.metadata?.is_notebook_agent || agentRes.data?.agent_type === 'notebook'
 
         if (isMasterAgent || isTopLevelAgent) {
-          // 加载层级关系
+          // 加载层级关系和parent agent
           try {
-            const hierarchyRes = await getAgentHierarchy(agentRes.data.id)
+            const [hierarchyRes, parentRes] = await Promise.all([
+              getAgentHierarchy(agentRes.data.id).catch(() => ({ data: null })),
+              getAgentParent(agentRes.data.id).catch(() => ({ data: null })),
+            ])
+            if (hierarchyRes?.data) {
             setHierarchy(hierarchyRes.data)
+            }
+            if (parentRes?.data) {
+              setParentAgent(parentRes.data)
+            }
           } catch (err) {
             console.error('Failed to load hierarchy:', err)
           }
@@ -202,6 +218,26 @@ function AgentDetailPage() {
 
   const isMasterAgent = agent.metadata?.is_master_agent || false
   const isTopLevelAgent = agent.agent_type === 'top_level_agent'
+  const isNotebookAgent = agent.metadata?.is_notebook_agent || agent.agent_type === 'notebook'
+
+  // Build current agent data for hierarchy view
+  const currentAgentData = {
+    id: agent.id,
+    notebook_id: agent.id,
+    agent_name: agent.agent_name || agent.name,
+    name: agent.name,
+    agent_type: agent.agent_type,
+    metadata: agent.metadata,
+    agent_card: agent.agent_card,
+    notebook_title: agent.notebook_title,
+    description: agent.description,
+  }
+
+  const handleAgentClick = (clickedAgent) => {
+    // Select the clicked agent to show its tools and instructions
+    const clickedAgentId = clickedAgent.id || clickedAgent.notebook_id
+    setSelectedAgentId(clickedAgentId)
+  }
 
   return (
     <Box
@@ -223,15 +259,18 @@ function AgentDetailPage() {
         }}
       >
         <Container
-          maxWidth="xl"
+          maxWidth={false}
           sx={{
-            display: 'flex',
+            display: isNotebookAgent ? 'flex' : 'block',
             gap: 3,
             py: 3,
             alignItems: 'flex-start',
+            width: '100%',
+            px: 3,
           }}
         >
-          {/* Left Side - Agent Card */}
+          {/* Left Side - Agent Card (only for Notebook Agent) */}
+          {isNotebookAgent ? (
           <Box
             sx={{
               width: { xs: '100%', md: '400px' },
@@ -310,8 +349,9 @@ function AgentDetailPage() {
               {/* Divider */}
               <Divider sx={{ mb: 3, borderColor: 'rgba(0,0,0,0.06)' }} />
 
-              {/* Agent Card Header */}
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
+              {/* Agent Card Header with Advance Mode Button */}
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <AgentIcon sx={{ color: '#007AFF', fontSize: 20 }} />
                 <Typography
                   variant="h6"
@@ -323,6 +363,24 @@ function AgentDetailPage() {
                 >
                   Agent Card
                 </Typography>
+                </Box>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => setShowAdvancedMode(!showAdvancedMode)}
+                  sx={{
+                    borderColor: 'rgba(0,0,0,0.2)',
+                    color: '#1D1D1F',
+                    fontSize: '0.75rem',
+                    textTransform: 'none',
+                    '&:hover': {
+                      borderColor: '#007AFF',
+                      bgcolor: 'rgba(0,122,255,0.05)',
+                    },
+                  }}
+                >
+                  {showAdvancedMode ? '隐藏' : 'Advanced Mode'}
+                </Button>
               </Box>
 
               {/* Display agent_card content */}
@@ -510,342 +568,26 @@ function AgentDetailPage() {
                   </Typography>
                 </Box>
               )}
+
+              {/* Advanced Mode - Instructions Editor */}
+              <InstructionsEditorInline
+                agentId={agentId}
+                expanded={showAdvancedMode}
+                onToggle={() => setShowAdvancedMode(false)}
+              />
             </Paper>
           </Box>
+          ) : null}
 
-          {/* Right Side - Notebook Content or Hierarchy */}
+          {/* Right Side - Notebook Content (for Notebook Agent) or Full Width Hierarchy View (for Top/Master Agent) */}
+          {isNotebookAgent ? (
           <Box
             sx={{
               flex: 1,
               minWidth: 0,
             }}
           >
-            {isMasterAgent || isTopLevelAgent ? (
-              // Hierarchy View for Master/Top Agents
-              <Paper
-                sx={{
-                  p: 3,
-                  bgcolor: 'white',
-                  borderRadius: 3,
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
-                }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
-                  <HierarchyIcon sx={{ color: '#007AFF' }} />
-                  <Typography
-                    variant="h6"
-                    sx={{
-                      fontWeight: 600,
-                      color: '#1D1D1F',
-                    }}
-                  >
-                    Hierarchy Structure
-                  </Typography>
-                </Box>
-
-                <Box>
-                  {hierarchy && hierarchy.children && hierarchy.children.length > 0 ? (
-                    <Box>
-                      <Typography variant="body2" sx={{ color: '#86868B', mb: 3 }}>
-                        This agent manages {hierarchy.children.length} child agent(s)
-                      </Typography>
-                      <Grid container spacing={2}>
-                        {hierarchy.children.map((child, index) => {
-                          const isChildMaster = child.agent_type === 'master' || child.metadata?.is_master_agent
-                          const isChildNotebook = child.agent_type === 'notebook' || child.metadata?.is_notebook_agent
-                          const parsedCard = child.agent_card ? parseAgentCard(child.agent_card) : null
-                          const childDescription = child.description || parsedCard?.description || ''
-                          const childOutline = parsedCard?.outline || child.content_stats?.outline || ''
-                          
-                          return (
-                            <Grid item xs={12} sm={6} md={4} key={index}>
-                              <Card
-                                sx={{
-                                  bgcolor: '#F5F5F7',
-                                  border: '1px solid rgba(0,0,0,0.08)',
-                                  borderRadius: 2,
-                                  transition: 'all 0.2s',
-                                  cursor: 'pointer',
-                                  height: '100%',
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                  '&:hover': {
-                                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                                    transform: 'translateY(-2px)',
-                                  },
-                                }}
-                                onClick={() => {
-                                  if (child.notebook_id || child.id) {
-                                    navigate(`/agents/${child.notebook_id || child.id}`)
-                                  }
-                                }}
-                              >
-                                <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, mb: 1.5 }}>
-                                    <AgentAvatar
-                                      seed={child.id || child.notebook_id || child.agent_name || child.name}
-                                      size={40}
-                                    />
-                                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                                      <Typography
-                                        variant="subtitle1"
-                                        sx={{
-                                          fontWeight: 600,
-                                          color: '#1D1D1F',
-                                          fontSize: '0.9rem',
-                                          overflow: 'hidden',
-                                          textOverflow: 'ellipsis',
-                                          whiteSpace: 'nowrap',
-                                        }}
-                                      >
-                                        {child.agent_name || child.name || 'Child Agent'}
-                                      </Typography>
-                                    </Box>
-                                  </Box>
-                                  
-                                  {child.notebook_title && (
-                                    <Typography
-                                      variant="body2"
-                                      sx={{
-                                        color: '#1D1D1F',
-                                        mb: 1,
-                                        fontWeight: 500,
-                                      }}
-                                    >
-                                      {child.notebook_title}
-                                    </Typography>
-                                  )}
-                                  
-                                  {/* Description */}
-                                  {childDescription && (
-                                    <Box sx={{ mb: 1.5 }}>
-                                      <Typography
-                                        variant="caption"
-                                        sx={{
-                                          color: '#86868B',
-                                          fontWeight: 600,
-                                          mb: 0.5,
-                                          display: 'block',
-                                          textTransform: 'uppercase',
-                                          fontSize: '0.65rem',
-                                        }}
-                                      >
-                                        📝 描述
-                                      </Typography>
-                                      <Typography
-                                        variant="body2"
-                                        sx={{
-                                          color: '#1D1D1F',
-                                          fontSize: '0.8rem',
-                                          lineHeight: 1.5,
-                                          display: '-webkit-box',
-                                          WebkitLineClamp: 3,
-                                          WebkitBoxOrient: 'vertical',
-                                          overflow: 'hidden',
-                                        }}
-                                      >
-                                        {childDescription}
-                                      </Typography>
-                                    </Box>
-                                  )}
-                                  
-                                  {/* Outline for Notebook agents only */}
-                                  {isChildNotebook && childOutline && (
-                                    <Box sx={{ mb: 1.5 }}>
-                                      <Typography
-                                        variant="caption"
-                                        sx={{
-                                          color: '#86868B',
-                                          fontWeight: 600,
-                                          mb: 0.5,
-                                          display: 'block',
-                                          textTransform: 'uppercase',
-                                          fontSize: '0.65rem',
-                                        }}
-                                      >
-                                        📋 大纲
-                                      </Typography>
-                                      <Box
-                                        sx={{
-                                          p: 1.5,
-                                          bgcolor: 'white',
-                                          borderRadius: 1.5,
-                                          border: '1px solid rgba(0,0,0,0.06)',
-                                          maxHeight: '120px',
-                                          overflow: 'auto',
-                                        }}
-                                      >
-                                        {childOutline.split('\n').slice(0, 5).map((line, lineIndex) => {
-                                          if (!line.trim()) return null
-                                          
-                                          const sectionMatch = line.match(/^(\d+)\.\s+(.+)$/)
-                                          if (sectionMatch) {
-                                            return (
-                                              <Typography
-                                                key={lineIndex}
-                                                variant="caption"
-                                                sx={{
-                                                  fontSize: '0.75rem',
-                                                  color: '#1D1D1F',
-                                                  display: 'block',
-                                                  mb: 0.5,
-                                                }}
-                                              >
-                                                • {sectionMatch[2]}
-                                              </Typography>
-                                            )
-                                          }
-                                          return null
-                                        })}
-                                        {childOutline.split('\n').length > 5 && (
-                                          <Typography
-                                            variant="caption"
-                                            sx={{
-                                              fontSize: '0.7rem',
-                                              color: '#86868B',
-                                              fontStyle: 'italic',
-                                            }}
-                                          >
-                                            ... 还有更多章节
-                                          </Typography>
-                                        )}
-                                      </Box>
-                                    </Box>
-                                  )}
-                                  
-                                  {/* For MasterAgent: show child notebooks' descriptions */}
-                                  {isChildMaster && child.children && child.children.length > 0 && (
-                                    <Box sx={{ mb: 1.5 }}>
-                                      <Typography
-                                        variant="caption"
-                                        sx={{
-                                          color: '#86868B',
-                                          fontWeight: 600,
-                                          mb: 0.5,
-                                          display: 'block',
-                                          textTransform: 'uppercase',
-                                          fontSize: '0.65rem',
-                                        }}
-                                      >
-                                        📚 子笔记本
-                                      </Typography>
-                                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                                        {child.children.slice(0, 3).map((subChild, subIndex) => {
-                                          const subParsedCard = subChild.agent_card ? parseAgentCard(subChild.agent_card) : null
-                                          const subDescription = subChild.description || subParsedCard?.description || ''
-                                          
-                                          if (!subDescription) return null
-                                          
-                                          return (
-                                            <Box key={subIndex} sx={{ pl: 1, borderLeft: '2px solid #4ECDC430' }}>
-                                              <Typography
-                                                variant="caption"
-                                                sx={{
-                                                  fontSize: '0.7rem',
-                                                  fontWeight: 600,
-                                                  color: '#1D1D1F',
-                                                  display: 'block',
-                                                  mb: 0.25,
-                                                }}
-                                              >
-                                                {subChild.agent_name || subChild.name || 'Notebook'}
-                                              </Typography>
-                                              <Typography
-                                                variant="caption"
-                                                sx={{
-                                                  fontSize: '0.7rem',
-                                                  color: '#86868B',
-                                                  display: '-webkit-box',
-                                                  WebkitLineClamp: 2,
-                                                  WebkitBoxOrient: 'vertical',
-                                                  overflow: 'hidden',
-                                                }}
-                                              >
-                                                {subDescription}
-                                              </Typography>
-                                            </Box>
-                                          )
-                                        })}
-                                        {child.children.length > 3 && (
-                                          <Typography
-                                            variant="caption"
-                                            sx={{
-                                              fontSize: '0.7rem',
-                                              color: '#86868B',
-                                              fontStyle: 'italic',
-                                            }}
-                                          >
-                                            ... 还有 {child.children.length - 3} 个笔记本
-                                          </Typography>
-                                        )}
-                                      </Box>
-                                    </Box>
-                                  )}
-                                  
-                                  <Box sx={{ mt: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
-                                    <Typography
-                                      variant="caption"
-                                      sx={{ color: '#86868B', fontSize: '0.7rem' }}
-                                    >
-                                      ID: {(child.notebook_id || child.id || '').substring(0, 8)}...
-                                    </Typography>
-                                    {child.agent_type && (
-                                      <Chip
-                                        label={
-                                          child.agent_type === 'top_level_agent'
-                                            ? 'Top Level'
-                                            : child.agent_type === 'master'
-                                            ? 'Master'
-                                            : child.agent_type === 'notebook'
-                                            ? 'Notebook'
-                                            : child.type
-                                        }
-                                        size="small"
-                                        sx={{
-                                          bgcolor:
-                                            child.agent_type === 'top_level_agent'
-                                              ? '#FF6B6B15'
-                                              : child.agent_type === 'master'
-                                              ? '#007AFF15'
-                                              : '#34C75915',
-                                          color:
-                                            child.agent_type === 'top_level_agent'
-                                              ? '#FF6B6B'
-                                              : child.agent_type === 'master'
-                                              ? '#007AFF'
-                                              : '#34C759',
-                                          fontWeight: 500,
-                                          fontSize: '0.7rem',
-                                          height: 20,
-                                          flexShrink: 0,
-                                        }}
-                                      />
-                                    )}
-                                  </Box>
-                                </CardContent>
-                              </Card>
-                            </Grid>
-                          )
-                        })}
-                      </Grid>
-                    </Box>
-                  ) : (
-                    <Box
-                      sx={{
-                        textAlign: 'center',
-                        py: 4,
-                        color: '#86868B',
-                      }}
-                    >
-                      <Typography variant="body2">
-                        No child agents found
-                      </Typography>
-                    </Box>
-                  )}
-                </Box>
-              </Paper>
-            ) : (
-              // Notebook Content View for Notebook Agents
+              {/* Notebook Content View for Notebook Agents */}
               <Paper
                 sx={{
                   p: 3,
@@ -1121,8 +863,71 @@ function AgentDetailPage() {
                   )}
                 </Box>
               </Paper>
-            )}
           </Box>
+          ) : (
+            // Full width layout for Top/Master Agent
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, width: '100%' }}>
+              {/* Top row: Hierarchy and Tools side by side */}
+              <Box
+                sx={{
+                  display: 'flex',
+                  gap: 3,
+                  width: '100%',
+                  alignItems: 'stretch', // Make both columns same height
+                }}
+              >
+                {/* Left: Hierarchy View - 50% */}
+                <Paper
+                  sx={{
+                    p: 3,
+                    bgcolor: 'white',
+                    borderRadius: 3,
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+                    flex: 1,
+                    width: '50%',
+                    minHeight: '600px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
+                    <HierarchyIcon sx={{ color: '#007AFF' }} />
+                    <Typography
+                      variant="h6"
+                      sx={{
+                        fontWeight: 600,
+                        color: '#1D1D1F',
+                      }}
+                    >
+                      Agent Hierarchy
+                    </Typography>
+                  </Box>
+                  <Box sx={{ flex: 1, overflowY: 'auto' }}>
+                    <HierarchyGraphView
+                      parentAgent={parentAgent}
+                      currentAgent={currentAgentData}
+                      children={hierarchy?.children || []}
+                      onAgentClick={handleAgentClick}
+                      selectedAgentId={selectedAgentId}
+                    />
+                  </Box>
+                </Paper>
+
+                {/* Right: Agent Tools - 50% */}
+                <Box sx={{ flex: 1, width: '50%', display: 'flex' }}>
+                  <AgentToolsView agentId={selectedAgentId || currentAgentData?.id} />
+                </Box>
+              </Box>
+
+              {/* Bottom: Agent Instructions */}
+              <AgentInstructionsView
+                agentId={selectedAgentId || currentAgentData?.id}
+                onSave={() => {
+                  // Optionally reload after saving
+                }}
+              />
+            </Box>
+          )}
         </Container>
       </Box>
     </Box>

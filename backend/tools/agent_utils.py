@@ -6,7 +6,7 @@ from typing import Dict, Any, TYPE_CHECKING
 if TYPE_CHECKING:
     from backend.agent.BaseAgent import BaseAgent
     from backend.agent.NoteBookAgent import NoteBookAgent
-    from backend.agent.specialized.NoteBookCreator import Outline, Section
+    from backend.agent.specialized.NotebookModels import Outline, Section
 
 
 def get_all_agent_info(agent_dict: Dict[str, Any], indent_level: int = 0, max_depth: int = 3) -> str:

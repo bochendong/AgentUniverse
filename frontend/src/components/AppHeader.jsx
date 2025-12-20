@@ -19,6 +19,7 @@ import {
   Settings as SettingsIcon,
   AccountCircle as AccountIcon,
   Login as LoginIcon,
+  Build as ToolsIcon,
 } from '@mui/icons-material'
 import AgentAvatar from './AgentAvatar'
 
@@ -149,6 +150,24 @@ function AppHeader() {
             }}
           >
             TopLevelAgent
+          </Button>
+          
+          <Button
+            startIcon={<ToolsIcon />}
+            onClick={() => navigate('/tools')}
+            sx={{
+              color: isDark ? '#ececf1' : '#1D1D1F',
+              textTransform: 'none',
+              fontWeight: 500,
+              bgcolor: isActive('/tools') 
+                ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)') 
+                : 'transparent',
+              '&:hover': {
+                bgcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+              },
+            }}
+          >
+            Tools
           </Button>
         </Box>
 

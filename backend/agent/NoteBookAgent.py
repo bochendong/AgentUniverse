@@ -3,12 +3,9 @@
 from typing import Optional, Dict
 
 from backend.agent.BaseAgent import BaseAgent, AgentType
-from backend.agent.specialized.NoteBookCreator import Outline, Section
+from backend.agent.specialized.NotebookModels import Outline, Section
 from backend.agent.specialized.AgentCard import AgentCard
 from backend.prompts.prompt_loader import load_prompt
-# Note: generate_markdown_from_agent imported locally in __init__ to avoid circular import
-# Note: create_modify_notes_tool imported locally to avoid circular import
-
 
 class NoteBookAgent(BaseAgent):
     """Notebook agent that manages notebook content."""
@@ -88,29 +85,33 @@ class NoteBookAgent(BaseAgent):
             # Import here to avoid circular import
             from backend.tools.agent_utils import generate_markdown_from_agent
             self.notes = generate_markdown_from_agent(self)
-            # Update instructions with generated notes
-            instructions = load_prompt(
-                "notebook_agent",
-                variables={"notes": self.notes}
-            )
-            self.instructions = instructions
         
         # Save to database after initialization
         self.save_to_db()
         
-        # Create modify_notes tool
-        # Import here to avoid circular import
-        from backend.tools.agent_tools import create_modify_notes_tool
-        modify_notes = create_modify_notes_tool(self)
+        # Create modify_notes tool using registry
+        from backend.tools.tool_registry import get_tool_registry
+        registry = get_tool_registry()
+        
+        modify_notes = registry.create_tool("modify_notes", self)
         
         # Set tools list
-        self.tools = [modify_notes]
+        self.tools = [modify_notes] if modify_notes else []
+        
+        # Update instructions with generated notes and tool usage
+        tool_ids = ['modify_notes']
+        instructions = load_prompt(
+            "notebook_agent",
+            variables={"notes": self.notes},
+            tool_ids=tool_ids
+        )
+        self.instructions = instructions
     
     def _recreate_tools(self):
         """Recreate tools after loading from database (tools cannot be pickled)."""
-        from backend.tools.agent_tools import create_modify_notes_tool
-        modify_notes = create_modify_notes_tool(self)
-        self.tools = [modify_notes]
+        # Default tool IDs for NoteBookAgent
+        default_tool_ids = ['modify_notes']
+        self._recreate_tools_from_db(default_tool_ids)
     
     def _get_word_count(self) -> int:
         """
@@ -189,7 +190,7 @@ class NoteBookAgent(BaseAgent):
         from agents import Runner
         from backend.agent.specialized.NotebookSplitter import SplitPlanAgent, SplitPlan
         from backend.agent.MasterAgent import MasterAgent
-        from backend.agent.specialized.NoteBookCreator import Outline
+        from backend.agent.specialized.NotebookModels import Outline
         
         # Step 1: Generate split plan using SplitPlanAgent
         # Prepare section information for the agent

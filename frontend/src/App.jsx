@@ -8,6 +8,8 @@ import AgentsListPage from './pages/AgentsListPage'
 import AgentDetailPage from './pages/AgentDetailPage'
 import TopLevelAgentInfoPage from './pages/TopLevelAgentInfoPage'
 import SettingsPage from './pages/SettingsPage'
+import ToolsPage from './pages/ToolsPage'
+import AgentAsToolDetailPage from './pages/AgentAsToolDetailPage'
 
 function App() {
   return (
@@ -43,6 +45,8 @@ function App() {
               <Route path="/agents" element={<AgentsListPage />} />
               <Route path="/agents/:agentId" element={<AgentDetailPage />} />
               <Route path="/top-level-agent" element={<TopLevelAgentInfoPage />} />
+              <Route path="/tools" element={<ToolsPage />} />
+              <Route path="/tools/:toolId" element={<AgentAsToolDetailPage />} />
               <Route path="/settings" element={<SettingsPage />} />
             </Routes>
           </Box>

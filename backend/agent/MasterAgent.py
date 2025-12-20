@@ -22,16 +22,10 @@ class MasterAgent(BaseAgent):
         """
         self.name = name
         
-        # Load prompt from file
-        instructions = load_prompt(
-            "master_agent",
-            variables={"agents_list": get_all_agent_info({})}
-        )
-        
-        # Initialize the base class first
+        # Initialize the base class first (with placeholder instructions)
         super().__init__(
             name=name,
-            instructions=instructions,
+            instructions="",  # Will update after tools are created
             tools=None,  # Will create after initialization
             mcp_config={},
             agent_type=AgentType.MASTER,
@@ -39,24 +33,35 @@ class MasterAgent(BaseAgent):
             DB_PATH=DB_PATH
         )
         
-        # Create tools (needs self to be initialized)
-        # Import here to avoid circular import
-        from backend.tools.agent_tools import create_add_notebook_by_file_tool
-        send_message = self._create_send_message_tool()
-        add_notebook_by_file = create_add_notebook_by_file_tool(self)
+        # Create tools using registry
+        from backend.tools.tool_registry import get_tool_registry
+        registry = get_tool_registry()
+        
+        send_message = registry.create_tool("send_message", self)
+        add_notebook_by_file = registry.create_tool("add_notebook_by_file", self)
+        create_notebook = registry.create_tool("create_notebook", self)
+        create_notebook_with_outline = registry.create_tool("create_notebook_with_outline", self)
         
         # Set tools list
-        self.tools = [send_message, add_notebook_by_file]
+        self.tools = [t for t in [send_message, add_notebook_by_file, create_notebook, create_notebook_with_outline] if t is not None]
         
-        # Save to database after tools are set
+        # Load prompt with tool usage (after tools are created)
+        tool_ids = ['send_message', 'add_notebook_by_file', 'create_notebook', 'create_notebook_with_outline']
+        instructions = load_prompt(
+            "master_agent",
+            variables={"agents_list": get_all_agent_info({})},
+            tool_ids=tool_ids
+        )
+        self.instructions = instructions
+        
+        # Save to database after tools are set (tool_ids will be saved automatically)
         self.save_to_db()
     
     def _recreate_tools(self):
         """Recreate tools after loading from database (tools cannot be pickled)."""
-        from backend.tools.agent_tools import create_add_notebook_by_file_tool
-        send_message = self._create_send_message_tool()
-        add_notebook_by_file = create_add_notebook_by_file_tool(self)
-        self.tools = [send_message, add_notebook_by_file]
+        # Default tool IDs for MasterAgent
+        default_tool_ids = ['send_message', 'add_notebook_by_file', 'create_notebook', 'create_notebook_with_outline']
+        self._recreate_tools_from_db(default_tool_ids)
 
     def _load_sub_agents_dict(self) -> Dict[str, Any]:
         """

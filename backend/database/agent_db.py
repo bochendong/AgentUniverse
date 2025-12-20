@@ -47,11 +47,19 @@ def init_db(db_path: Optional[str] = None) -> None:
             name TEXT NOT NULL,
             parent_agent_id TEXT,
             sub_agent_ids TEXT,
+            tool_ids TEXT,
             data BLOB NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    
+    # Add tool_ids column if it doesn't exist (migration)
+    try:
+        cursor.execute("ALTER TABLE agents ADD COLUMN tool_ids TEXT")
+    except sqlite3.OperationalError:
+        # Column already exists, ignore
+        pass
     
     conn.commit()
     conn.close()
@@ -92,6 +100,19 @@ def save_agent(agent: Any, db_path: Optional[str] = None) -> bool:
         # Get sub_agent_ids as JSON string
         sub_agent_ids_json = json.dumps(getattr(agent, 'sub_agent_ids', []))
         
+        # Get tool_ids from tools (extract tool names/IDs before removing tools)
+        tool_ids = []
+        if original_tools:
+            for tool in original_tools:
+                # Try to get tool name/ID
+                tool_name = getattr(tool, 'name', None)
+                if hasattr(tool, 'function') and tool.function:
+                    if hasattr(tool.function, '__name__'):
+                        tool_name = tool.function.__name__
+                if tool_name:
+                    tool_ids.append(tool_name)
+        tool_ids_json = json.dumps(tool_ids)
+        
         # Get agent type - handle both AgentType enum and string
         agent_type = getattr(agent, 'type', AgentType.BASE_AGENT)
         if isinstance(agent_type, AgentType):
@@ -108,7 +129,7 @@ def save_agent(agent: Any, db_path: Optional[str] = None) -> bool:
             # Update existing agent
             cursor.execute("""
                 UPDATE agents 
-                SET type = ?, name = ?, parent_agent_id = ?, sub_agent_ids = ?, 
+                SET type = ?, name = ?, parent_agent_id = ?, sub_agent_ids = ?, tool_ids = ?,
                     data = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
             """, (
@@ -116,20 +137,22 @@ def save_agent(agent: Any, db_path: Optional[str] = None) -> bool:
                 getattr(agent, 'name', ''),
                 getattr(agent, 'parent_agent_id', None),
                 sub_agent_ids_json,
+                tool_ids_json,
                 agent_data,
                 agent.id
             ))
         else:
             # Insert new agent
             cursor.execute("""
-                INSERT INTO agents (id, type, name, parent_agent_id, sub_agent_ids, data)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO agents (id, type, name, parent_agent_id, sub_agent_ids, tool_ids, data)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (
                 agent.id,
                 agent_type_str,
                 getattr(agent, 'name', ''),
                 getattr(agent, 'parent_agent_id', None),
                 sub_agent_ids_json,
+                tool_ids_json,
                 agent_data
             ))
         
@@ -167,14 +190,26 @@ def load_agent(agent_id: str, db_path: Optional[str] = None) -> Optional[Any]:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         
-        # Get both type and data
+        # Get type, data, and tool_ids
+        # Handle both old schema (without tool_ids) and new schema (with tool_ids)
         cursor.execute("SELECT type, data FROM agents WHERE id = ?", (agent_id,))
         row = cursor.fetchone()
+        
+        # Try to get tool_ids separately (if column exists)
+        tool_ids_json = '[]'
+        try:
+            cursor.execute("SELECT tool_ids FROM agents WHERE id = ?", (agent_id,))
+            tool_ids_row = cursor.fetchone()
+            if tool_ids_row and tool_ids_row[0]:
+                tool_ids_json = tool_ids_row[0]
+        except sqlite3.OperationalError:
+            # Column doesn't exist yet, use empty list
+            tool_ids_json = '[]'
         
         conn.close()
         
         if row:
-            expected_type, agent_data = row
+            expected_type, agent_data = row[0], row[1]
             
             # Deserialize agent data
             agent = pickle.loads(agent_data)
@@ -201,11 +236,35 @@ def load_agent(agent_id: str, db_path: Optional[str] = None) -> Optional[Any]:
             # Verify the agent is of the correct class type
             expected_class = type_to_class.get(expected_type, BaseAgent)
             
-            # Recreate tools after loading (tools were removed before serialization)
-            # This needs to be done after loading because function_tool cannot be pickled
-            if hasattr(agent, '_recreate_tools'):
+            # Load tools from database based on tool_ids
+            tool_ids = []
+            if tool_ids_json and tool_ids_json != '[]':
+                try:
+                    tool_ids = json.loads(tool_ids_json)
+                except (json.JSONDecodeError, TypeError):
+                    tool_ids = []
+            
+            # Recreate tools from database
+            # Note: We restore tools but do NOT save to database here
+            # Saving should only happen when agent is actually modified
+            if tool_ids and hasattr(agent, '_recreate_tools_from_db'):
+                try:
+                    agent._recreate_tools_from_db(tool_ids, db_path=db_path)
+                except Exception as e:
+                    print(f"Error recreating tools from DB for agent {agent_id}: {str(e)}")
+                    # Fallback to default _recreate_tools if _recreate_tools_from_db fails
+                    if hasattr(agent, '_recreate_tools'):
+                        try:
+                            agent._recreate_tools()
+                            # Don't save here - let AgentManager handle it if needed
+                        except Exception:
+                            pass
+            elif hasattr(agent, '_recreate_tools'):
+                # If no tool_ids or _recreate_tools_from_db doesn't exist, use default
                 try:
                     agent._recreate_tools()
+                    # Don't save here - tools restoration during load shouldn't trigger save
+                    # Only save when agent is actually modified (e.g., tools added/removed)
                 except Exception:
                     pass
             

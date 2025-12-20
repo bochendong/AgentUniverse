@@ -12,16 +12,10 @@ class TopLevelAgent(BaseAgent):
     """Top-level agent that manages the root MasterAgent."""
     
     def __init__(self, DB_PATH: Optional[str] = None):
-        # Load prompt from file (will update after creating MasterAgent)
-        instructions = load_prompt(
-            "top_level_agent",
-            variables={"agents_list": get_all_agent_info({})}
-        )
-        
         # Initialize the base class first (this creates self.id)
         super().__init__(
             name="TopLevelAgent",
-            instructions=instructions,
+            instructions="",  # Will update after tools are created
             tools=None,  # Will create after initialization
             mcp_config={},
             agent_type=AgentType.TOP_LEVEL,
@@ -32,38 +26,59 @@ class TopLevelAgent(BaseAgent):
         # Save to database after initialization
         self.save_to_db()
         
-        # Create root MasterAgent after we have self.id
-        root_master = MasterAgent("Top Master Agent", parent_agent_id=self.id, DB_PATH=self.DB_PATH)
+        # Check if MasterAgent already exists before creating
+        from backend.database.agent_db import load_all_agents
+        existing_master_agent_id = None
+        all_agents = load_all_agents(self.DB_PATH)
+        for agent_id, agent in all_agents.items():
+            if isinstance(agent, MasterAgent):
+                parent_id = getattr(agent, 'parent_agent_id', None)
+                if parent_id == self.id:
+                    existing_master_agent_id = agent_id
+                    print(f"[TopLevelAgent.__init__] Found existing MasterAgent: {agent_id}")
+                    break
         
-        # Save root master to database
-        root_master.save_to_db()
+        if existing_master_agent_id:
+            # Use existing MasterAgent
+            self._add_sub_agents(existing_master_agent_id)
+            print(f"[TopLevelAgent.__init__] Using existing MasterAgent: {existing_master_agent_id}")
+        else:
+            # Create root MasterAgent after we have self.id
+            root_master = MasterAgent("Top Master Agent", parent_agent_id=self.id, DB_PATH=self.DB_PATH)
+            
+            # Save root master to database
+            root_master.save_to_db()
+            
+            # Add root master to sub_agent_ids
+            self._add_sub_agents(root_master.id)
+            print(f"[TopLevelAgent.__init__] Created new MasterAgent: {root_master.id}")
         
-        # Add root master to sub_agent_ids
-        self._add_sub_agents(root_master.id)
+        # Create tools using registry
+        from backend.tools.tool_registry import get_tool_registry
+        registry = get_tool_registry()
         
-        # Update instructions with actual agent list
-        agent_dict = self._load_sub_agents_dict()
-        instructions = load_prompt(
-            "top_level_agent",
-            variables={"agents_list": get_all_agent_info(agent_dict)}
-        )
-        self.instructions = instructions
-        
-        # Create tools
-        # Import here to avoid circular import
-        from backend.tools.agent_tools import create_handle_file_upload_tool
-        send_message = self._create_send_message_tool()
-        handle_file_upload = create_handle_file_upload_tool(self)
+        send_message = registry.create_tool("send_message", self)
+        handle_file_upload = registry.create_tool("handle_file_upload", self)
+        create_notebook_from_outline = registry.create_tool("create_notebook_from_outline", self)
         
         # Set tools list
-        self.tools = [send_message, handle_file_upload]
+        self.tools = [t for t in [send_message, handle_file_upload, create_notebook_from_outline] if t is not None]
+        
+        # Update instructions with actual agent list and tool usage
+        agent_dict = self._load_sub_agents_dict()
+        tool_ids = ['send_message', 'handle_file_upload', 'create_notebook_from_outline']
+        instructions = load_prompt(
+            "top_level_agent",
+            variables={"agents_list": get_all_agent_info(agent_dict)},
+            tool_ids=tool_ids
+        )
+        self.instructions = instructions
     
     def _recreate_tools(self):
         """Recreate tools after loading from database (tools cannot be pickled)."""
-        from backend.tools.agent_tools import create_handle_file_upload_tool
-        send_message = self._create_send_message_tool()
-        handle_file_upload = create_handle_file_upload_tool(self)
-        self.tools = [send_message, handle_file_upload]
+        # Default tool IDs for TopLevelAgent
+        default_tool_ids = ['send_message', 'handle_file_upload', 'create_notebook_from_outline']
+        self._recreate_tools_from_db(default_tool_ids)
     
     def _load_sub_agents_dict(self) -> Dict[str, Any]:
         """

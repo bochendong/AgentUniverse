@@ -2,80 +2,29 @@
 
 import os
 import uuid
-from typing import Optional, List, Literal, Dict
+from typing import Optional
 from agents import Agent, Runner, function_tool, AgentOutputSchema
-from pydantic import BaseModel, ConfigDict
-
-
-class Outline(BaseModel):
-    """大纲结构"""
-    model_config = ConfigDict(strict=False)
-    
-    notebook_title: str
-    notebook_description: str  # 描述笔记本包含什么知识和不包含什么知识，确定笔记本的边界
-    outlines: dict[str, str]
-
-
-class Example(BaseModel):
-    """
-    例子及其答案、证明
-    支持5种题目类型：选择题、填空题、证明题、简答题、代码题
-    """
-    model_config = ConfigDict(strict=False)
-    
-    # 题目基本信息
-    question_type: Optional[Literal["multiple_choice", "fill_blank", "proof", "short_answer", "code"]] = None  # 题目类型
-    question: str  # 题目/例子内容（必需）
-    
-    # 通用字段
-    answer: Optional[str] = None  # 答案内容（通用，用于简答题、填空题等）
-    explanation: Optional[str] = None  # 解释（用于选择题、填空题、简答题）
-    proof: Optional[str] = None  # 证明步骤（用于证明题）
-    
-    # 选择题专用字段
-    options: Optional[List[str]] = None  # 选项列表（选择题用，4个选项）
-    correct_answer: Optional[str] = None  # 正确答案（选择题用，如 "A", "B", "C", "D"）
-    
-    # 填空题专用字段
-    blanks: Optional[Dict[str, str]] = None  # 填空题答案字典（填空题用）
-    # 格式：{"[空1]": "答案1", "[空2]": "答案2", ...} 或 {"blank1": "答案1", "blank2": "答案2", ...}
-    # 键必须与 question 中的占位符完全匹配
-    
-    # 代码题专用字段
-    code_answer: Optional[str] = None  # 代码答案（代码题用）
-
-
-class Theorem(BaseModel):
-    """定理及其证明"""
-    model_config = ConfigDict(strict=False)
-    theorem: str  # 定理内容（必需）
-    proof: Optional[str] = None  # 证明内容（可选）
-    examples: list[Example] = []  # 该定理相关的例子（可选）
-
-
-class ConceptBlock(BaseModel):
-    """概念块：一个定义及其相关的例子、笔记、定理等"""
-    model_config = ConfigDict(strict=False)
-    definition: str  # 定义（必需）
-    examples: list[Example] = []  # 相关例子列表
-    notes: list[str] = []  # 相关笔记/注意点（可选）
-    theorems: list[Theorem] = []  # 相关定理列表
-
-
-class Section(BaseModel):
-    """章节结构"""
-    model_config = ConfigDict(strict=False)
-    section_title: str
-    introduction: str  # 介绍
-    concept_blocks: list[ConceptBlock]  # 概念块列表
-    standalone_examples: list[Example] = []  # 独立例子（可选）
-    standalone_notes: list[str] = []  # 独立笔记（可选）
-    summary: str  # 总结
-    exercises: list[Example] = []  # 练习题
+from backend.agent.specialized.NotebookModels import (
+    Outline, Section, Example, ConceptBlock, Theorem
+)
+# 延迟导入以避免循环导入
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from backend.agent.specialized.ExerciseRefinementAgent import ExerciseRefinementAgent
+    from backend.agent.specialized.ProofRefinementAgent import ProofRefinementAgent
 
 
 def get_file_content(file_path: str) -> str:
     """读取文件内容，支持 .docx 和 .txt/.md 文件"""
+    import os
+    
+    # 检查文件是否存在
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"文件不存在: {file_path}")
+    
+    if not os.path.isfile(file_path):
+        raise ValueError(f"路径不是文件: {file_path}")
+    
     if file_path.endswith('.docx'):
         try:
             from docx import Document
@@ -84,11 +33,24 @@ def get_file_content(file_path: str) -> str:
             return content
         except ImportError:
             raise ImportError("需要安装 python-docx 库来读取 .docx 文件: pip install python-docx")
+        except Exception as e:
+            raise IOError(f"读取 .docx 文件失败: {file_path}, 错误: {str(e)}")
     else:
         # 读取文本文件
-        with open(file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-        return content
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            return content
+        except UnicodeDecodeError:
+            # 尝试其他编码
+            try:
+                with open(file_path, 'r', encoding='gbk') as f:
+                    content = f.read()
+                return content
+            except Exception as e:
+                raise IOError(f"读取文件失败（编码问题）: {file_path}, 错误: {str(e)}")
+        except Exception as e:
+            raise IOError(f"读取文件失败: {file_path}, 错误: {str(e)}")
 
 
 class OutlineMakerAgent(Agent):
@@ -273,7 +235,13 @@ class NoteBookAgentCreator(Agent):
 3. **内容增强**：
    - 如果定义不够清晰，补充说明和解释
    - 如果例子缺少解答，补充完整解答步骤
-   - 如果证明过于简略，补充中间步骤和推理说明
+   - **证明质量要求（重要，必须严格遵守）**：
+     * 所有proof必须包含详细的中间步骤，不能跳过关键推理
+     * 必须明确引用使用的公式、定理、定义（如："由公式 $(xy)^{-1} = y^{-1} x^{-1}$ 可得..."），不能只说"根据XX公式"或"根据逆元公式"
+     * 对于涉及计算的证明，必须展示详细的计算过程，不能只说"根据XX公式得到XX结果"
+     * 每一步推理都要有清晰说明，不能直接得出结论
+     * 使用标记使步骤清晰（如"步骤1"、"步骤2"或"(1)"、"(2)"）
+     * 如果原文档的证明过于简略，必须补充完整，使其达到教学标准，便于初学者理解
    - 修复格式问题（特殊字符、数学公式等），使用标准LaTeX格式
    - 改进语言表达，使内容更清晰易懂
 
@@ -291,6 +259,14 @@ class NoteBookAgentCreator(Agent):
    - 定义后面关联的 examples（例子列表，每个 Example 必须是以下5种题目类型之一）
    - 定义后面关联的 notes（笔记列表）
    - 定义后面关联的 theorems（定理列表，每个 Theorem 包含 theorem、proof、examples）
+     * theorem: 定理内容
+     * proof: 证明内容，**必须详细完整**：
+       - 分步骤说明，使用标记（如"步骤1"、"步骤2"或"(1)"、"(2)"），不能一笔带过
+       - 明确引用使用的公式和定理（不能只说"根据公式"或"根据定理"）
+       - 展示关键计算和推理过程，不能省略中间步骤
+       - 每一步都要有清晰说明
+       - 如果原文档证明简略，必须补充完整达到教学标准
+     * examples: 该定理相关的例子（可选）
    - 每个concept_block的结构：{{"definition": "定义内容（必需）", "examples": [...], "notes": [...], "theorems": [...]}}
 
 3. **standalone_examples**（独立例子，可选）：不属于特定定义的例子，必须是以下5种题目类型之一
@@ -329,7 +305,13 @@ class NoteBookAgentCreator(Agent):
    - question_type: "proof"
    - question: 需要证明的命题或问题
    - answer: 简要答案或结论
-   - proof: 详细的证明步骤，必须完整清晰
+   - proof: 详细的证明步骤，**必须满足以下要求**：
+     * 分步骤说明，使用标记（如"步骤1"、"步骤2"或"(1)"、"(2)"）
+     * 明确引用使用的公式、定理、定义（不能只说"根据公式"或"根据定理"，要具体说明是哪个公式）
+     * 展示关键计算过程，不能省略中间步骤
+     * 每一步都有清晰的推理说明
+     * 对于复杂的代数运算，必须展示完整的展开过程
+     * 如果原文档证明简略，必须补充完整达到教学标准
 
 4. **简答题 (short_answer)**：
    - question_type: "short_answer"
@@ -344,7 +326,18 @@ class NoteBookAgentCreator(Agent):
    - explanation: 可选的代码解释（可选）
 
 **重要**：
-- 每个例子和练习都必须明确指定 question_type
+- **每个例子和练习都必须明确指定 question_type，不能为null**
+- **题目类型识别规则（必须严格遵守）**：
+  * 如果question包含以下关键词之一，**必须**识别为选择题（multiple_choice）：
+    - "下列哪个"、"哪个是"、"哪一个是"、"选择"、"选择正确的"、"Which of the following"等
+  * 如果question包含"[空1]"、"[空2]"等占位符，**必须**识别为填空题（fill_blank）
+  * 如果question要求"证明"、"证明题"、"证明以下命题"等，**必须**识别为证明题（proof）
+  * 如果question是开放性问题或需要详细解释，识别为简答题（short_answer）
+- **选择题完整性要求**：
+  * 如果原文档中的题目只有问题没有选项，**必须**根据题目内容补充4个选项（A、B、C、D）
+  * 选项必须合理、有干扰性，不能太明显
+  * 必须指定 correct_answer（"A"、"B"、"C" 或 "D"）
+  * 必须提供 explanation 解释为什么选择这个答案
 - 根据题目类型，只填写相应的字段（如选择题填写 options 和 correct_answer，填空题填写 blanks）
 - 保持题目的多样性和合理性，根据内容特点选择合适的题目类型
 
@@ -353,7 +346,11 @@ class NoteBookAgentCreator(Agent):
 - 保持原文档的核心内容和格式
 - 如果原文档中某个定义后面有多个例子，必须全部提取
 - 如果原文档中有定理和证明标记，且与章节相关，必须提取
-- 例子如果缺少解答，必须补充完整解答
+- **题目完整性要求（必须严格遵守）**：
+  * 例子如果缺少解答，必须补充完整解答
+  * **选择题如果缺少选项，必须根据题目内容补充4个合理选项**
+  * **填空题如果缺少答案，必须补充完整的blanks字典**
+  * **证明题如果缺少证明步骤，必须补充详细的证明过程（参考上面的证明质量要求）**
 - 按照原文档顺序组织内容：定义 → 相关例子/笔记/定理/证明 → 下一个定义
 """
             
@@ -365,6 +362,28 @@ class NoteBookAgentCreator(Agent):
             
             response = await Runner.run(section_agent, f"请为章节 '{section_title}' 创建完整内容")
             section_data = response.final_output
+            
+            # 阶段2：使用专门的Agent优化内容（延迟导入以避免循环导入）
+            # 2.1 优化练习题和例子
+            print(f"[优化] 开始优化章节 '{section_title}' 的练习题和例子...")
+            from backend.agent.specialized.ExerciseRefinementAgent import ExerciseRefinementAgent
+            exercise_refiner = ExerciseRefinementAgent(
+                section=section_data,
+                section_context=f"{section_description}\n\n章节介绍: {section_data.introduction[:500]}"
+            )
+            section_data = await exercise_refiner.refine()
+            print(f"[优化] 练习题和例子优化完成")
+            
+            # 2.2 优化证明
+            print(f"[优化] 开始优化章节 '{section_title}' 的证明...")
+            from backend.agent.specialized.ProofRefinementAgent import ProofRefinementAgent
+            proof_refiner = ProofRefinementAgent(
+                section=section_data,
+                section_context=f"{section_description}\n\n章节介绍: {section_data.introduction[:500]}"
+            )
+            section_data = await proof_refiner.refine()
+            print(f"[优化] 证明优化完成")
+            
             self.sections[section_title] = section_data
             
             return section_data
