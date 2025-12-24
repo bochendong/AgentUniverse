@@ -1,5 +1,7 @@
 # AgentUniverse
 
+<h4 align="center">🤖 你的智能笔记生成助手</h4>
+
 <p align="center">
   <a href="https://github.com/yourusername/AgentUniverse/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?label=License&style=flat-square" alt="License" /></a>
   <a href="https://github.com/yourusername/AgentUniverse/blob/main/CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square" alt="PRs Welcome" /></a>
@@ -17,7 +19,6 @@
   <img src="imgs/cover.png" alt="AgentUniverse Cover" width="100%">
 </div>
 
-<h4 align="center">🤖 你的智能笔记生成助手</h4>
 
 
 <p align="center">
