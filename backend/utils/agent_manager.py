@@ -47,6 +47,8 @@ class AgentManager:
         # Check cache first (unless force_reload)
         if not force_reload and agent_id in self._agent_cache:
             agent = self._agent_cache[agent_id]
+            # Update model settings (config may have changed)
+            self._update_model_settings(agent)
             # Ensure tools are still valid (they might have been cleared)
             if not hasattr(agent, 'tools') or agent.tools is None:
                 self._ensure_tools_restored(agent)
@@ -57,6 +59,9 @@ class AgentManager:
         if agent is None:
             return None
         
+        # Update model settings from config (important: agents loaded from DB may have old model settings)
+        self._update_model_settings(agent)
+        
         # Ensure tools are restored (load_agent should do this, but double-check)
         self._ensure_tools_restored(agent)
         
@@ -64,6 +69,79 @@ class AgentManager:
         self._agent_cache[agent_id] = agent
         
         return agent
+    
+    def _update_model_settings(self, agent: BaseAgent) -> None:
+        """
+        更新 Agent 的模型设置（从数据库加载的 Agent 可能使用旧的模型设置）
+        
+        Args:
+            agent: The agent instance
+        """
+        try:
+            from backend.config.model_config import get_model_name
+            model_name = get_model_name()
+            
+            # 检查当前模型是否与配置一致
+            current_model = None
+            if hasattr(agent, 'model') and agent.model:
+                current_model = agent.model
+            elif hasattr(agent, 'model_settings') and agent.model_settings:
+                if hasattr(agent.model_settings, 'model'):
+                    current_model = agent.model_settings.model
+            
+            # 如果模型不一致，更新它
+            if current_model != model_name:
+                print(f"[AgentManager] 更新 Agent {agent.id[:8]}... 的模型: {current_model} -> {model_name}")
+                
+                # 尝试直接设置 model 属性（Agent 类可能支持这个）
+                if hasattr(agent, 'model'):
+                    agent.model = model_name
+                
+                # 如果 Agent 有 model_settings 属性，也更新它
+                if hasattr(agent, 'model_settings'):
+                    from backend.config.model_config import get_model_settings
+                    agent.model_settings = get_model_settings()
+                
+                # 标记为已修改，以便保存到数据库
+                self._modified_agents.add(agent.id)
+            else:
+                # 即使模型一致，也确保 model_settings 是最新的（可能包含 reasoning、verbosity 等设置）
+                if hasattr(agent, 'model_settings'):
+                    from backend.config.model_config import get_model_settings
+                    new_settings = get_model_settings()
+                    
+                    # 检查是否需要更新
+                    needs_update = False
+                    
+                    # 检查 reasoning 设置
+                    if hasattr(new_settings, 'reasoning') and hasattr(agent.model_settings, 'reasoning'):
+                        if agent.model_settings.reasoning != new_settings.reasoning:
+                            needs_update = True
+                    elif hasattr(new_settings, 'reasoning') and not hasattr(agent.model_settings, 'reasoning'):
+                        needs_update = True
+                    elif not hasattr(new_settings, 'reasoning') and hasattr(agent.model_settings, 'reasoning'):
+                        needs_update = True
+                    
+                    # 检查 verbosity 设置
+                    if hasattr(new_settings, 'verbosity') and hasattr(agent.model_settings, 'verbosity'):
+                        if agent.model_settings.verbosity != new_settings.verbosity:
+                            needs_update = True
+                    elif hasattr(new_settings, 'verbosity') and not hasattr(agent.model_settings, 'verbosity'):
+                        needs_update = True
+                    
+                    # 如果模型名称不同，也需要更新
+                    if hasattr(new_settings, 'model') and hasattr(agent.model_settings, 'model'):
+                        if agent.model_settings.model != new_settings.model:
+                            needs_update = True
+                    
+                    if needs_update:
+                        print(f"[AgentManager] 更新 Agent {agent.id[:8]}... 的 model_settings（模型: {current_model or 'N/A'}）")
+                        agent.model_settings = new_settings
+                        self._modified_agents.add(agent.id)
+        except Exception as e:
+            print(f"[AgentManager] 更新模型设置失败: {e}")
+            import traceback
+            traceback.print_exc()
     
     def _ensure_tools_restored(self, agent: BaseAgent) -> None:
         """
@@ -77,6 +155,42 @@ class AgentManager:
         """
         # If tools already exist and are valid, no need to restore
         if hasattr(agent, 'tools') and agent.tools is not None and len(agent.tools) > 0:
+            # But for TopLevelAgent, MasterAgent and NoteBookAgent, we should still update instructions to ensure latest prompt
+            from backend.agent.TopLevelAgent import TopLevelAgent
+            from backend.agent.MasterAgent import MasterAgent
+            from backend.agent.NoteBookAgent import NoteBookAgent
+            
+            if isinstance(agent, TopLevelAgent):
+                # TopLevelAgent's _recreate_tools already updates instructions, but let's ensure it's called
+                if hasattr(agent, '_recreate_tools'):
+                    try:
+                        agent._recreate_tools()
+                    except Exception as e:
+                        print(f"[AgentManager] Error updating TopLevelAgent instructions: {e}")
+            elif isinstance(agent, MasterAgent):
+                # For MasterAgent, always ensure instructions are updated (to refresh agents_list with current sub-agents)
+                # This ensures the "你管理的 Agent" section shows the latest NotebookAgents (skills)
+                if hasattr(agent, '_recreate_tools'):
+                    try:
+                        agent._recreate_tools()
+                        print(f"[AgentManager] Updated MasterAgent instructions, length: {len(agent.instructions)}")
+                    except Exception as e:
+                        print(f"[AgentManager] Error updating MasterAgent instructions: {e}")
+                        import traceback
+                        traceback.print_exc()
+            elif isinstance(agent, NoteBookAgent):
+                # For NoteBookAgent, always ensure instructions are updated (to replace {notes} and {tools_usage})
+                # Check if instructions contain placeholders
+                if hasattr(agent, 'instructions') and ("{notes}" in agent.instructions or "{tools_usage}" in agent.instructions):
+                    print(f"[AgentManager] NoteBookAgent {agent.id} has placeholders in instructions, updating...")
+                    if hasattr(agent, '_recreate_tools'):
+                        try:
+                            agent._recreate_tools()
+                            print(f"[AgentManager] Updated NoteBookAgent instructions, length: {len(agent.instructions)}")
+                        except Exception as e:
+                            print(f"[AgentManager] Error updating NoteBookAgent instructions: {e}")
+                            import traceback
+                            traceback.print_exc()
             return
         
         # Try to restore tools from database
@@ -86,6 +200,13 @@ class AgentManager:
             try:
                 agent._recreate_tools_from_db(tool_ids)
                 if agent.tools and len(agent.tools) > 0:
+                    # For TopLevelAgent, also update instructions
+                    from backend.agent.TopLevelAgent import TopLevelAgent
+                    if isinstance(agent, TopLevelAgent) and hasattr(agent, '_recreate_tools'):
+                        try:
+                            agent._recreate_tools()  # This will update instructions
+                        except Exception as e:
+                            print(f"[AgentManager] Error updating TopLevelAgent instructions: {e}")
                     return  # Successfully restored
             except Exception as e:
                 print(f"[AgentManager] Error restoring tools from DB for {agent.id}: {e}")

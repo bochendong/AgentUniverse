@@ -66,18 +66,19 @@ def init_default_tools():
             'output_type': 'str',
             'output_description': '返回MasterAgent执行create_notebook工具后的完整输出字符串。通常是包含大纲信息的markdown格式文本（格式与create_notebook的输出相同），用于前端展示给用户确认。如果文件不存在或处理失败，返回错误信息（如"错误: 文件不存在: {file_path}"或"处理文件上传失败: {error_message}"）',
         },
-        {
-            'id': 'modify_notes',
-            'name': 'modify_notes',
-            'description': '修改笔记内容',
-            'task': 'NoteBookAgent用于更新其笔记内容，并自动更新instructions以反映新的笔记内容。如果笔记过大，会提示建议拆分。',
-            'agent_type': 'NoteBookAgent',
-            'input_params': {
-                'new_notes': {'type': 'str', 'description': '新的笔记内容', 'required': True},
-            },
-            'output_type': 'str',
-            'output_description': '返回操作结果字符串。正常情况下返回"笔记已更新"。如果检测到笔记需要拆分（章节数>10或字数>3000），返回"笔记已更新。⚠️ 建议拆分：章节数={sections_count}，字数={word_count}（超过限制：章节>10 或 字数>3000）"，提示用户考虑拆分笔记。该工具会自动更新agent的instructions以反映新的笔记内容',
-        },
+        # DEPRECATED: modify_notes tool has been removed - use add_content_to_section or modify_by_id instead
+        # {
+        #     'id': 'modify_notes',
+        #     'name': 'modify_notes',
+        #     'description': '修改笔记内容',
+        #     'task': 'NoteBookAgent用于更新其笔记内容，并自动更新instructions以反映新的笔记内容。如果笔记过大，会提示建议拆分。',
+        #     'agent_type': 'NoteBookAgent',
+        #     'input_params': {
+        #         'new_notes': {'type': 'str', 'description': '新的笔记内容', 'required': True},
+        #     },
+        #     'output_type': 'str',
+        #     'output_description': '返回操作结果字符串。正常情况下返回"笔记已更新"。如果检测到笔记需要拆分（章节数>10或字数>3000），返回"笔记已更新。⚠️ 建议拆分：章节数={sections_count}，字数={word_count}（超过限制：章节>10 或 字数>3000）"，提示用户考虑拆分笔记。该工具会自动更新agent的instructions以反映新的笔记内容',
+        # },
     ]
     
     # Save all tools

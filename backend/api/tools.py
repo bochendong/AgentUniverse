@@ -1,10 +1,11 @@
 """Tools API routes."""
 
 from fastapi import APIRouter, HTTPException
-from backend.database.tools_db import get_all_tools, get_tool
+from backend.database.tools_db import get_all_tools, get_tool as get_tool_from_db
 from backend.tools.tool_registry import get_tool_registry
 from backend.tools.tool_discovery import init_tool_system
-from backend.tools.tool_usage_generator import format_tool_usage
+from backend.tools.utils import generate_tools_usage_for_agent
+from backend.tools.utils.tool_usage_generator import format_tool_usage
 
 router = APIRouter(prefix="/api/tools", tags=["tools"])
 
@@ -45,7 +46,7 @@ async def list_tools():
 async def get_tool(tool_id: str):
     """Get a tool by ID."""
     try:
-        tool = get_tool(tool_id)
+        tool = get_tool_from_db(tool_id)
         if not tool:
             raise HTTPException(status_code=404, detail="Tool not found")
         return tool
@@ -66,7 +67,7 @@ async def get_agent_as_tool_details(tool_id: str):
         tool_type = None
         agent_class_name = None
         
-        tool = get_tool(tool_id)
+        tool = get_tool_from_db(tool_id)
         if tool:
             tool_type = tool.get('tool_type', 'function')
             agent_class_name = tool.get('agent_class_name')
@@ -97,22 +98,26 @@ async def get_agent_as_tool_details(tool_id: str):
         # Import the agent class dynamically
         try:
             if agent_class_name == 'OutlineMakerAgent':
-                from backend.agent.specialized.NoteBookCreator import OutlineMakerAgent
+                from backend.tools.agent_as_tools.NotebookCreator import OutlineMakerAgent
                 AgentClass = OutlineMakerAgent
             elif agent_class_name == 'NoteBookAgentCreator':
-                from backend.agent.specialized.NoteBookCreator import NoteBookAgentCreator
-                AgentClass = NoteBookAgentCreator
+                # 向后兼容：NoteBookAgentCreator 已被 NotebookCreator 替代
+                # NotebookCreator 不是 Agent，所以这里保留旧引用但标记为已废弃
+                raise HTTPException(
+                    status_code=400, 
+                    detail="NoteBookAgentCreator 已被废弃，请使用 NotebookCreator（通过 NotebookCreationStrategies）"
+                )
             elif agent_class_name == 'ExerciseRefinementAgent':
-                from backend.agent.specialized.ExerciseRefinementAgent import ExerciseRefinementAgent
+                from backend.tools.agent_as_tools.refinement_agents import ExerciseRefinementAgent
                 AgentClass = ExerciseRefinementAgent
             elif agent_class_name == 'ProofRefinementAgent':
-                from backend.agent.specialized.ProofRefinementAgent import ProofRefinementAgent
+                from backend.tools.agent_as_tools.refinement_agents import ProofRefinementAgent
                 AgentClass = ProofRefinementAgent
             elif agent_class_name == 'IntentExtractionAgent':
-                from backend.agent.specialized.IntentExtractionAgent import IntentExtractionAgent
+                from backend.tools.agent_as_tools.IntentExtractionAgent import IntentExtractionAgent
                 AgentClass = IntentExtractionAgent
             elif agent_class_name == 'OutlineRevisionAgent':
-                from backend.agent.specialized.OutlineRevisionAgent import OutlineRevisionAgent
+                from backend.tools.agent_as_tools.OutlineRevisionAgent import OutlineRevisionAgent
                 AgentClass = OutlineRevisionAgent
             else:
                 raise HTTPException(status_code=400, detail=f"Unknown agent class: {agent_class_name}")
@@ -127,13 +132,95 @@ async def get_agent_as_tool_details(tool_id: str):
             'description': tool.get('description') if tool else None,
             'task': tool.get('task') if tool else None,
             'instructions': None,
+            'prompt_template': None,
             'tools': [],
             'sub_agents': [],
         }
         
-        # Try to get instructions from class docstring or __init__ docstring
-        if hasattr(AgentClass, '__doc__') and AgentClass.__doc__:
-            agent_info['instructions'] = AgentClass.__doc__.strip()
+        # Try to get instructions by creating a sample agent instance
+        # This will give us the actual prompt used by the agent
+        try:
+            if agent_class_name == 'OutlineMakerAgent':
+                # OutlineMakerAgent needs file_path
+                import tempfile
+                import os
+                # Create a temporary empty file for testing
+                temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False)
+                temp_file.write("# Test Document\n\nThis is a test document.")
+                temp_file.close()
+                try:
+                    sample_agent = AgentClass(temp_file.name)
+                    if hasattr(sample_agent, 'instructions'):
+                        agent_info['instructions'] = sample_agent.instructions
+                        agent_info['prompt_template'] = sample_agent.instructions  # For now, same as instructions
+                finally:
+                    os.unlink(temp_file.name)
+            elif agent_class_name == 'NoteBookAgentCreator':
+                # NoteBookAgentCreator 已被废弃，跳过
+                agent_info['instructions'] = "[已废弃] NoteBookAgentCreator 已被 NotebookCreator 替代"
+                agent_info['prompt_template'] = "[已废弃]"
+            elif agent_class_name in ['ExerciseRefinementAgent', 'ProofRefinementAgent']:
+                # These are BaseRefinementAgent, not Agent class
+                # They don't have instructions directly, but they create internal Agent
+                # We can create a sample instance to get the internal agent's instructions
+                from backend.models import Section
+                sample_section = Section(
+                    section_title="示例章节",
+                    introduction="这是一个示例章节的介绍",
+                    concept_blocks=[],
+                    summary=""
+                )
+                try:
+                    sample_refiner = AgentClass(sample_section, section_context="示例上下文")
+                    # New RefinementAgent uses internal Agent, so we can't directly get instructions
+                    # But we can describe what it does
+                    if agent_class_name == 'ExerciseRefinementAgent':
+                        agent_info['instructions'] = "[RefinementAgent] 优化练习题和例子，识别题目类型，补充缺失内容，验证完整性"
+                    elif agent_class_name == 'ProofRefinementAgent':
+                        agent_info['instructions'] = "[RefinementAgent] 优化数学证明，补充中间步骤，添加公式引用，优化证明结构"
+                    agent_info['prompt_template'] = agent_info['instructions']
+                except Exception as create_error:
+                    print(f"[get_agent_as_tool_details] Error creating {agent_class_name} instance: {create_error}")
+                    import traceback
+                    traceback.print_exc()
+            elif agent_class_name == 'IntentExtractionAgent':
+                # IntentExtractionAgent needs user_request and optional file_path
+                sample_agent = AgentClass("示例用户请求", file_path=None)
+                if hasattr(sample_agent, 'instructions'):
+                    agent_info['instructions'] = sample_agent.instructions
+                    agent_info['prompt_template'] = sample_agent.instructions
+            elif agent_class_name == 'OutlineRevisionAgent':
+                # OutlineRevisionAgent needs outline and revision_request
+                from backend.models import Outline
+                sample_outline = Outline(
+                    notebook_title="示例笔记本",
+                    notebook_description="示例描述",
+                    outlines={"章节1": "描述1"}
+                )
+                sample_agent = AgentClass(sample_outline, "示例修改请求")
+                if hasattr(sample_agent, 'instructions'):
+                    agent_info['instructions'] = sample_agent.instructions
+                    agent_info['prompt_template'] = sample_agent.instructions
+        except Exception as e:
+            print(f"[get_agent_as_tool_details] Failed to create sample agent for instructions: {e}")
+            import traceback
+            traceback.print_exc()
+            # Fallback to docstring
+            if hasattr(AgentClass, '__doc__') and AgentClass.__doc__:
+                agent_info['instructions'] = AgentClass.__doc__.strip()
+                agent_info['prompt_template'] = AgentClass.__doc__.strip()
+        
+        # If still no instructions, try docstring
+        if not agent_info['instructions']:
+            if hasattr(AgentClass, '__doc__') and AgentClass.__doc__:
+                agent_info['instructions'] = AgentClass.__doc__.strip()
+                agent_info['prompt_template'] = AgentClass.__doc__.strip()
+        
+        # Log what we got
+        if agent_info['instructions']:
+            print(f"[get_agent_as_tool_details] Successfully retrieved instructions for {agent_class_name} (length: {len(agent_info['instructions'])})")
+        else:
+            print(f"[get_agent_as_tool_details] Warning: No instructions found for {agent_class_name}")
         
         # Check if agent has tools (for NoteBookAgentCreator, it has section_maker and write_to_file)
         if hasattr(AgentClass, '__init__'):

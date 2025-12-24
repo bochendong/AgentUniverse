@@ -235,7 +235,7 @@ function AgentDetailsSidebar({ agentId, onClose, onSave }) {
                     color: '#1D1D1F',
                   }}
                 >
-                  Agent Tools
+                  Agent Skills
                 </Typography>
                 {tools.length > 0 && (
                   <Typography
@@ -257,7 +257,7 @@ function AgentDetailsSidebar({ agentId, onClose, onSave }) {
                 </Box>
               ) : tools.length === 0 ? (
                 <Typography variant="body2" sx={{ color: '#86868B', fontStyle: 'italic' }}>
-                  该 agent 没有 tools
+                  该 agent 没有 skills
                 </Typography>
               ) : (
                 <Box>

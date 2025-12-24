@@ -3,8 +3,8 @@
 from typing import Optional, Dict
 
 from backend.agent.BaseAgent import BaseAgent, AgentType
-from backend.agent.specialized.NotebookModels import Outline, Section
-from backend.agent.specialized.AgentCard import AgentCard
+from backend.models import Outline, Section
+from backend.models import AgentCard
 from backend.prompts.prompt_loader import load_prompt
 
 class NoteBookAgent(BaseAgent):
@@ -80,38 +80,127 @@ class NoteBookAgent(BaseAgent):
         else:
             self.name = f"NoteBookAgent_{self.id[:8]}"
         
+        # Ensure all content has IDs (for backward compatibility and new content)
+        if self.sections:
+            from backend.utils.content_id_utils import ensure_ids
+            ensure_ids(self)
+        
         # Generate notes from outline and sections if available (after super().__init__)
+        # IMPORTANT: Always generate notes with IDs included so AI can use modify_by_id tool
         if self.outline and self.sections and not self.notes:
             # Import here to avoid circular import
-            from backend.tools.agent_utils import generate_markdown_from_agent
-            self.notes = generate_markdown_from_agent(self)
+            from backend.tools.utils import generate_markdown_from_agent
+            self.notes = generate_markdown_from_agent(self, include_ids=True)
         
         # Save to database after initialization
         self.save_to_db()
         
-        # Create modify_notes tool using registry
+        # Create tools using registry
         from backend.tools.tool_registry import get_tool_registry
         registry = get_tool_registry()
         
-        modify_notes = registry.create_tool("modify_notes", self)
+        modify_by_id = registry.create_tool("modify_by_id", self)
+        get_content_by_id = registry.create_tool("get_content_by_id", self)
+        add_content_to_section = registry.create_tool("add_content_to_section", self)
         
         # Set tools list
-        self.tools = [modify_notes] if modify_notes else []
+        self.tools = [t for t in [modify_by_id, get_content_by_id, add_content_to_section] if t is not None]
         
-        # Update instructions with generated notes and tool usage
-        tool_ids = ['modify_notes']
+        # Update instructions with generated notes (with IDs) and tool usage
+        # IMPORTANT: Ensure notes include IDs for modify_by_id tool to work
+        # If notes don't have IDs, regenerate them with IDs included
+        if self.sections and self.outline:
+            from backend.tools.utils import generate_markdown_from_agent
+            notes_with_ids = generate_markdown_from_agent(self, include_ids=True)
+            # Only update if notes changed (to avoid unnecessary updates)
+            if notes_with_ids != self.notes:
+                self.notes = notes_with_ids
+        
+        tool_ids = ['modify_by_id', 'get_content_by_id', 'add_content_to_section']
+        # Ensure notes is passed as string (not None)
+        notes_value = self.notes if self.notes is not None else ""
         instructions = load_prompt(
             "notebook_agent",
-            variables={"notes": self.notes},
+            variables={"notes": notes_value},
+            agent_instance=self,  # Pass agent instance to properly generate tools_usage
             tool_ids=tool_ids
         )
         self.instructions = instructions
+        # Save updated instructions to database
+        self.save_to_db()
     
     def _recreate_tools(self):
         """Recreate tools after loading from database (tools cannot be pickled)."""
-        # Default tool IDs for NoteBookAgent
-        default_tool_ids = ['modify_notes']
+        # Ensure IDs exist (for backward compatibility)
+        if self.sections:
+            from backend.utils.content_id_utils import ensure_ids
+            ensure_ids(self)
+        
+        # Regenerate notes with IDs included so AI can use modify_by_id tool
+        notes_regenerated = False
+        if self.sections and self.outline:
+            from backend.tools.utils import generate_markdown_from_agent
+            new_notes = generate_markdown_from_agent(self, include_ids=True)
+            # Only update if notes actually changed (to avoid unnecessary saves)
+            if new_notes != self.notes:
+                self.notes = new_notes
+                notes_regenerated = True
+        
+        # Ensure notes is not None (default to empty string)
+        if self.notes is None:
+            self.notes = ""
+        
+        # Always use the new default tool IDs (ignore old tool_ids from database)
+        # This ensures we don't try to create deprecated modify_notes tool
+        default_tool_ids = ['modify_by_id', 'get_content_by_id', 'add_content_to_section']
         self._recreate_tools_from_db(default_tool_ids)
+        
+        # Update tool_ids in database to new defaults (fix old data that had modify_notes)
+        # This ensures next time we load, we won't try to create modify_notes
+        import json
+        import sqlite3
+        from backend.database.agent_db import get_db_path
+        db_path = get_db_path(self.DB_PATH if hasattr(self, 'DB_PATH') else None)
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        tool_ids_json = json.dumps(default_tool_ids, ensure_ascii=False)
+        cursor.execute(
+            "UPDATE agents SET tool_ids = ? WHERE id = ?",
+            (tool_ids_json, self.id)
+        )
+        conn.commit()
+        conn.close()
+        
+        # Update instructions with notes that include IDs
+        from backend.prompts.prompt_loader import load_prompt
+        # Ensure notes is passed as string (not None)
+        notes_value = self.notes if self.notes is not None else ""
+        print(f"[NoteBookAgent._recreate_tools] Updating instructions, notes length: {len(notes_value) if notes_value else 0}")
+        print(f"[NoteBookAgent._recreate_tools] Notes preview (first 200 chars): {notes_value[:200] if notes_value else 'EMPTY'}")
+        
+        instructions = load_prompt(
+            "notebook_agent",
+            variables={"notes": notes_value},
+            agent_instance=self,  # Pass agent instance to properly generate tools_usage
+            tool_ids=default_tool_ids
+        )
+        
+        # Verify instructions were updated
+        print(f"[NoteBookAgent._recreate_tools] Generated instructions length: {len(instructions)}")
+        if "{notes}" in instructions:
+            print(f"[NoteBookAgent._recreate_tools] ❌ ERROR: Instructions still contain {{notes}} placeholder after load_prompt!")
+            print(f"[NoteBookAgent._recreate_tools] Instructions preview (first 500 chars): {instructions[:500]}")
+        if "{tools_usage}" in instructions:
+            print(f"[NoteBookAgent._recreate_tools] ❌ ERROR: Instructions still contain {{tools_usage}} placeholder after load_prompt!")
+        if "{notes}" not in instructions and "{tools_usage}" not in instructions:
+            print(f"[NoteBookAgent._recreate_tools] ✅ Successfully replaced all placeholders in instructions")
+        
+        self.instructions = instructions
+        
+        # Always save to database after updating instructions (to persist updated instructions with notes and tools_usage)
+        print(f"[NoteBookAgent._recreate_tools] Saving updated instructions to database...")
+        self.save_to_db()
+        print(f"[NoteBookAgent._recreate_tools] ✅ Saved instructions to database (length: {len(self.instructions)})")
     
     def _get_word_count(self) -> int:
         """
@@ -188,9 +277,9 @@ class NoteBookAgent(BaseAgent):
         5. Delete this agent from database
         """
         from agents import Runner
-        from backend.agent.specialized.NotebookSplitter import SplitPlanAgent, SplitPlan
+        from backend.agent.specialized.NotebookSplitter import SplitPlanAgent
         from backend.agent.MasterAgent import MasterAgent
-        from backend.agent.specialized.NotebookModels import Outline
+        from backend.models import Outline, SplitPlan
         
         # Step 1: Generate split plan using SplitPlanAgent
         # Prepare section information for the agent
@@ -271,8 +360,8 @@ class NoteBookAgent(BaseAgent):
             # Verify notes were generated
             if not new_notebook.notes:
                 # Regenerate notes if not already generated
-                from backend.tools.agent_utils import generate_markdown_from_agent
-                new_notebook.notes = generate_markdown_from_agent(new_notebook)
+                from backend.tools.utils import generate_markdown_from_agent
+                new_notebook.notes = generate_markdown_from_agent(new_notebook, include_ids=True)
                 new_notebook.save_to_db()
             
             new_notebook_agents.append(new_notebook)
@@ -340,5 +429,37 @@ class NoteBookAgent(BaseAgent):
             description=notebook_description,
             outline=outline_dict
         )
+    
+    def get_or_create_modify_agent(self):
+        """
+        获取或创建关联的NotebookModifyAgent
+        
+        Returns:
+            NotebookModifyAgent实例
+        """
+        from backend.agent.specialized.NotebookModifyAgent import NotebookModifyAgent
+        
+        # 检查是否已有modify_agent_id
+        if hasattr(self, 'modify_agent_id') and self.modify_agent_id:
+            try:
+                modify_agent = self.load_agent_from_db_by_id(self.modify_agent_id)
+                if modify_agent:
+                    return modify_agent
+            except Exception:
+                # 如果加载失败，创建新的
+                pass
+        
+        # 创建新的NotebookModifyAgent
+        modify_agent = NotebookModifyAgent(
+            notebook_agent_id=self.id,
+            parent_agent_id=self.parent_agent_id,
+            DB_PATH=self.DB_PATH
+        )
+        
+        # 保存modify_agent_id到当前agent
+        self.modify_agent_id = modify_agent.id
+        self.save_to_db()
+        
+        return modify_agent
 
 

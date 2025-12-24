@@ -387,121 +387,25 @@ function AgentInstructionsView({ agentId, onSave }) {
             },
           }}
         >
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            components={{
-              p: ({ node, children, ...props }) => {
-                // Helper function to process text and highlight placeholders
-                const processText = (text) => {
-                  if (typeof text !== 'string') return text
-                  const parts = text.split(/(\{[a-z_]+\})/gi)
-                  return parts.map((part, index) => {
-                    const isPlaceholder = /^\{[a-z_]+\}$/i.test(part)
-                    if (isPlaceholder) {
-                      return (
-                        <Box
-                          key={index}
-                          component="span"
-                          sx={{
-                            bgcolor: '#FFF3CD',
-                            color: '#856404',
-                            padding: '2px 6px',
-                            borderRadius: '4px',
-                            fontFamily: 'Monaco, "Courier New", monospace',
-                            fontSize: '0.875rem',
-                            fontWeight: 600,
-                            border: '1px solid #FFE69C',
-                            mx: 0.5,
-                            display: 'inline-block',
-                          }}
-                        >
-                          {part}
-                        </Box>
-                      )
-                    }
-                    return <React.Fragment key={index}>{part}</React.Fragment>
-                  })
-                }
-                
-                // Process children recursively
-                const processChildren = (children) => {
-                  if (typeof children === 'string') {
-                    return processText(children)
-                  }
-                  if (Array.isArray(children)) {
-                    return children.map((child, index) => {
-                      if (typeof child === 'string') {
-                        return <React.Fragment key={index}>{processText(child)}</React.Fragment>
-                      }
-                      if (React.isValidElement(child)) {
-                        return React.cloneElement(child, { key: index }, processChildren(child.props.children))
-                      }
-                      return <React.Fragment key={index}>{child}</React.Fragment>
-                    })
-                  }
-                  return children
-                }
-                
-                return <Typography component="p" variant="body2" {...props}>{processChildren(children)}</Typography>
-              },
-              h1: ({ node, ...props }) => (
-                <Typography component="h1" variant="h5" {...props} />
-              ),
-              h2: ({ node, ...props }) => (
-                <Typography component="h2" variant="h6" {...props} />
-              ),
-              h3: ({ node, ...props }) => (
-                <Typography component="h3" variant="subtitle1" {...props} />
-              ),
-              h4: ({ node, ...props }) => (
-                <Typography component="h4" variant="subtitle2" {...props} />
-              ),
-              code: ({ node, inline, className, children, ...props }) => {
-                const match = /language-(\w+)/.exec(className || '')
-                if (!inline && match) {
-                  return (
-                    <Box
-                      component="pre"
-                      sx={{
-                        bgcolor: '#F5F5F7',
-                        borderRadius: 2,
-                        padding: '16px',
-                        overflowX: 'auto',
-                        fontSize: '0.875rem',
-                        fontFamily: 'Monaco, "Courier New", monospace',
-                        margin: '1em 0',
-                        border: '1px solid rgba(0,0,0,0.08)',
-                        lineHeight: 1.6,
-                      }}
-                      {...props}
-                    >
-                      <code>{children}</code>
-                    </Box>
-                  )
-                }
-                return (
-                  <Typography
-                    component="code"
-                    sx={{
-                      bgcolor: '#F5F5F7',
-                      padding: '3px 6px',
-                      borderRadius: '4px',
-                      fontSize: '0.875rem',
-                      fontFamily: 'Monaco, "Courier New", monospace',
-                      color: '#E83E8C',
-                      border: '1px solid rgba(0,0,0,0.06)',
-                    }}
-                    {...props}
-                  >
-                    {children}
-                  </Typography>
-                )
-              },
+          <Box
+            component="pre"
+            sx={{
+              fontFamily: 'Monaco, "Courier New", monospace',
+              fontSize: '0.875rem',
+              lineHeight: 1.6,
+              color: '#1D1D1F',
+              backgroundColor: '#F5F5F7',
+              padding: 3,
+              borderRadius: 2,
+              border: '1px solid rgba(0,0,0,0.1)',
+              overflowX: 'auto',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              margin: 0,
             }}
           >
-            {/* Use template instructions if available (with placeholders), otherwise use current instructions */}
-            {templateInstructions || instructions || '暂无 instructions'}
-          </ReactMarkdown>
+            {instructions || '暂无 instructions'}
+          </Box>
         </Box>
       )}
     </Paper>

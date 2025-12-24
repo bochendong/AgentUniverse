@@ -409,18 +409,9 @@ export default function ExampleBlock({ example, indent = false, showLabel = true
                 <Typography variant="body2" sx={{ fontWeight: 600, mb: 1, mt: 1, color: '#1D1D1F' }}>
                   答案：
                 </Typography>
-                <Typography 
-                  variant="body2" 
-                  sx={{ 
-                    color: '#1D1D1F', 
-                    lineHeight: 1.6, 
-                    whiteSpace: 'pre-line', 
-                    mb: example.proof ? 2 : 0,
-                    fontSize: '0.8125rem',
-                  }}
-                >
+                <MarkdownText variant="body2" fontSize="0.8125rem" sx={{ mb: example.proof ? 2 : 0 }}>
                   {example.answer}
-                </Typography>
+                </MarkdownText>
               </>
             )}
             {example.proof && (
@@ -487,18 +478,9 @@ export default function ExampleBlock({ example, indent = false, showLabel = true
                 <Typography variant="body2" sx={{ fontWeight: 600, mb: 1, mt: 1, color: '#1D1D1F' }}>
                   答案：
                 </Typography>
-                <Typography 
-                  variant="body2" 
-                  sx={{ 
-                    color: '#1D1D1F', 
-                    lineHeight: 1.6, 
-                    whiteSpace: 'pre-line', 
-                    mb: example.proof ? 2 : 0,
-                    fontSize: '0.8125rem',
-                  }}
-                >
+                <MarkdownText variant="body2" fontSize="0.8125rem" sx={{ mb: example.proof ? 2 : 0 }}>
                   {example.answer}
-                </Typography>
+                </MarkdownText>
               </>
             )}
             {example.proof && (

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Container,
@@ -13,6 +13,9 @@ import {
   Grid,
   Card,
   CardContent,
+  TextField,
+  Collapse,
+  IconButton,
 } from '@mui/material'
 import {
   ArrowBack as BackIcon,
@@ -21,6 +24,14 @@ import {
   SmartToy as AgentIcon,
   Warning as WarningIcon,
   CallSplit as SplitIcon,
+  Send as SendIcon,
+  Chat as ChatIcon,
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon,
+  Refresh as RefreshIcon,
+  Visibility as VisibilityIcon,
+  Code as CodeIcon,
+  Description as DescriptionIcon,
 } from '@mui/icons-material'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -30,7 +41,7 @@ import rehypeRaw from 'rehype-raw'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { prism } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import 'katex/dist/katex.min.css'
-import { getAgent, getNotebook, getNotebookContent, getAgentHierarchy, splitNotebook, getAgentParent } from '../api/client'
+import { getAgent, getNotebook, getNotebookContent, getAgentHierarchy, splitNotebook, getAgentParent, chatWithAgent, getAgentInstructions } from '../api/client'
 import AgentAvatar from '../components/AgentAvatar'
 import NotebookContent from '../components/notebook/NotebookContent'
 import InstructionsEditorInline from '../components/InstructionsEditorInline'
@@ -116,9 +127,101 @@ function AgentDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [splitting, setSplitting] = useState(false)
-  const [showAdvancedMode, setShowAdvancedMode] = useState(false)
+  const [showAdvancedMode, setShowAdvancedMode] = useState(false) // Left side AgentCard Advanced Mode (deprecated, now controls right side)
   const [selectedAgentId, setSelectedAgentId] = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [showChat, setShowChat] = useState(false)
+  const [chatInput, setChatInput] = useState('')
+  const [chatMessages, setChatMessages] = useState([])
+  const [chatSending, setChatSending] = useState(false)
+  const [chatSessionId, setChatSessionId] = useState(null)
+  const chatMessagesEndRef = useRef(null)
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false)
+  const [outlineExpanded, setOutlineExpanded] = useState(false)
+  const [showNotebookAdvancedMode, setShowNotebookAdvancedMode] = useState(false)
+  const [instructions, setInstructions] = useState('')
+  const [loadingInstructions, setLoadingInstructions] = useState(false)
+  const [advancedModeMarkdown, setAdvancedModeMarkdown] = useState('')
+  const [loadingAdvancedMarkdown, setLoadingAdvancedMarkdown] = useState(false)
+  const [showInstructionsView, setShowInstructionsView] = useState(false)
+  const [instructionsContent, setInstructionsContent] = useState('')
+  const [loadingInstructionsContent, setLoadingInstructionsContent] = useState(false)
+
+  // 重新加载notebook内容的函数
+  const reloadNotebookContent = async () => {
+    try {
+      const contentRes = await getNotebookContent(agentId)
+      if (contentRes?.data) {
+        setNotebookContent(contentRes.data)
+      }
+    } catch (err) {
+      console.error('Failed to reload notebook content:', err)
+    }
+  }
+
+  // 当 showNotebookAdvancedMode 或 showAdvancedMode 改变时加载 markdown 格式的 notebook content（包含 XML 标签）
+  useEffect(() => {
+    const loadAdvancedModeMarkdown = async () => {
+      // Load markdown format notebook content if either advanced mode is enabled
+      if (!agentId || (!showNotebookAdvancedMode && !showAdvancedMode)) {
+        setAdvancedModeMarkdown('')
+        return
+      }
+      try {
+        setLoadingAdvancedMarkdown(true)
+        // Request markdown format explicitly to get XML tags
+        const response = await getNotebookContent(agentId, 'markdown')
+        if (response?.data?.content) {
+          setAdvancedModeMarkdown(response.data.content)
+        } else {
+          setAdvancedModeMarkdown('')
+        }
+      } catch (err) {
+        console.error('Failed to load advanced mode markdown:', err)
+        setAdvancedModeMarkdown('')
+      } finally {
+        setLoadingAdvancedMarkdown(false)
+      }
+    }
+
+    if ((showNotebookAdvancedMode || showAdvancedMode) && agentId) {
+      loadAdvancedModeMarkdown()
+    } else {
+      setAdvancedModeMarkdown('')
+    }
+  }, [showNotebookAdvancedMode, showAdvancedMode, agentId])
+
+  // 加载 instructions 内容
+  const loadInstructionsContent = async () => {
+    if (!agentId) return
+    try {
+      setLoadingInstructionsContent(true)
+      const response = await getAgentInstructions(agentId)
+      if (response?.data?.current_instructions) {
+        setInstructionsContent(response.data.current_instructions)
+      } else {
+        setInstructionsContent('')
+      }
+    } catch (err) {
+      console.error('Failed to load instructions:', err)
+      setInstructionsContent('')
+    } finally {
+      setLoadingInstructionsContent(false)
+    }
+  }
+
+  // 当 showInstructionsView 变为 true 时加载 instructions
+  useEffect(() => {
+    if (showInstructionsView && agentId) {
+      loadInstructionsContent()
+    }
+  }, [showInstructionsView, agentId])
+
+  // 当 agentId 改变时，重置 instructions 相关状态
+  useEffect(() => {
+    setShowInstructionsView(false)
+    setInstructionsContent('')
+  }, [agentId])
 
   useEffect(() => {
     const loadData = async () => {
@@ -175,6 +278,13 @@ function AgentDetailPage() {
     }
     loadData()
   }, [agentId])
+
+  // Auto-scroll to bottom when chat messages change
+  useEffect(() => {
+    if (showChat && chatMessagesEndRef.current) {
+      chatMessagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [chatMessages, showChat])
 
   if (loading) {
     return (
@@ -239,6 +349,77 @@ function AgentDetailPage() {
     setSelectedAgentId(clickedAgentId)
   }
 
+  const handleChatSend = async () => {
+    if (!chatInput.trim() || chatSending) return
+
+    const userMessage = chatInput.trim()
+    setChatInput('')
+    setChatSending(true)
+
+    // Add user message to chat
+    const newMessages = [...chatMessages, { role: 'user', content: userMessage }]
+    setChatMessages(newMessages)
+
+    try {
+      // Send message to agent
+      const response = await chatWithAgent(agentId, userMessage, chatSessionId)
+      const agentResponse = response.data.response
+      const sessionId = response.data.session_id
+
+      // Update session ID if it's new
+      if (!chatSessionId && sessionId) {
+        setChatSessionId(sessionId)
+      }
+
+      // Add agent response to chat
+      setChatMessages([...newMessages, { role: 'assistant', content: agentResponse }])
+
+      // 检查当前agent是否为notebook agent
+      const currentAgentIsNotebook = agent?.metadata?.is_notebook_agent || agent?.agent_type === 'notebook'
+      
+      // 对于notebook agent，在聊天完成后总是尝试刷新内容
+      // 因为AI可能使用不同的表达方式，而且用户可能要求更新内容
+      if (currentAgentIsNotebook) {
+        // 扩展的关键词列表，用于判断是否明确提到了更新操作
+        const updateKeywords = [
+          '已更新', '已添加', '已修改', '已成功', '已完成',
+          '成功添加', '成功更新', '更新成功', '添加成功',
+          '笔记已更新', '内容已更新', '已为你添加',
+          '已经添加', '已经更新', '已经修改',
+          '添加完成', '更新完成', '修改完成',
+          '已添加到', '已更新到', '已添加到章节',
+          '成功向章节', '字段添加内容', '字段更新',
+          '已添加', '已完成添加', '添加了'
+        ]
+        
+        const hasUpdateKeyword = updateKeywords.some(keyword => agentResponse.includes(keyword))
+        
+        if (hasUpdateKeyword) {
+          // 如果检测到明确的更新关键词，快速刷新（500ms）
+          console.log('检测到更新关键词，将在500ms后刷新notebook内容')
+          setTimeout(() => {
+            reloadNotebookContent()
+          }, 500)
+        } else {
+          // 即使没有明确的更新关键词，也延迟刷新（2秒）
+          // 这样可以捕获那些AI说"已经添加了"但没有使用标准关键词的情况
+          console.log('聊天完成，将在2秒后刷新notebook内容以确保数据最新')
+          setTimeout(() => {
+            reloadNotebookContent()
+          }, 2000)
+        }
+      }
+    } catch (err) {
+      console.error('Failed to send message:', err)
+      setChatMessages([
+        ...newMessages,
+        { role: 'assistant', content: `错误: ${err.response?.data?.detail || err.message || '发送消息失败'}` },
+      ])
+    } finally {
+      setChatSending(false)
+    }
+  }
+
   return (
     <Box
       sx={{
@@ -280,75 +461,169 @@ function AgentDetailPage() {
             {/* Agent Card - Combined */}
             <Paper
               sx={{
-                p: 3,
+                display: 'flex',
+                flexDirection: 'column',
                 bgcolor: 'white',
                 borderRadius: 3,
                 boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+                maxHeight: 'calc(100vh - 120px)',
+                overflow: 'hidden',
               }}
             >
-              {/* Agent Avatar and Tags */}
-              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 3 }}>
-                <AgentAvatar 
-                  seed={agent.avatar_seed} 
-                  size={80}
+              {/* Agent Card - Business Card Style (Fixed) */}
+              <Box
+                sx={{
+                  flexShrink: 0,
+                  p: 3,
+                  pb: 0,
+                }}
+              >
+                <Box
                   sx={{
-                    border: `3px solid ${
-                      isTopLevelAgent
-                        ? '#FF6B6B30'
-                        : isMasterAgent
-                        ? '#4ECDC430'
-                        : '#95E1D330'
-                    }`,
-                    boxShadow: `0 4px 12px ${
-                      isTopLevelAgent
-                        ? '#FF6B6B20'
-                        : isMasterAgent
-                        ? '#4ECDC420'
-                        : '#95E1D320'
-                    }`,
-                    mb: 2,
+                    background: 'linear-gradient(135deg, rgba(0,122,255,0.05) 0%, rgba(0,122,255,0.02) 100%)',
+                    borderRadius: 2,
+                    p: 3,
+                    mb: 3,
+                    border: '1px solid rgba(0,0,0,0.05)',
                   }}
-                />
-                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'center' }}>
-                  {isTopLevelAgent && (
-                    <Chip
-                      label="Top Level"
-                      size="small"
+                >
+                {/* Header: Avatar and Badge */}
+                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, mb: 2.5 }}>
+                  <AgentAvatar 
+                    seed={agent.avatar_seed} 
+                    size={64}
+                    sx={{
+                      border: `2px solid ${
+                        isTopLevelAgent
+                          ? '#FF6B6B40'
+                          : isMasterAgent
+                          ? '#4ECDC440'
+                          : '#95E1D340'
+                      }`,
+                      boxShadow: `0 2px 8px ${
+                        isTopLevelAgent
+                          ? '#FF6B6B15'
+                          : isMasterAgent
+                          ? '#4ECDC415'
+                          : '#95E1D315'
+                      }`,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    {/* Title */}
+                    {agent.agent_card && (
+                      <Typography
+                        variant="h5"
+                        sx={{
+                          fontWeight: 700,
+                          color: '#1D1D1F',
+                          fontSize: '1.25rem',
+                          mb: 0.5,
+                          lineHeight: 1.3,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                        }}
+                      >
+                        {agent.agent_card.title || (agent.agent_type === 'master' ? 'Master Agent' : '未命名笔记本')}
+                      </Typography>
+                    )}
+                    {/* Badge */}
+                    <Box sx={{ display: 'flex', gap: 0.5, mt: 1 }}>
+                      {isTopLevelAgent && (
+                        <Chip
+                          label="Top Level"
+                          size="small"
+                          sx={{
+                            bgcolor: '#FF6B6B',
+                            color: 'white',
+                            fontWeight: 600,
+                            fontSize: '0.7rem',
+                            height: '22px',
+                          }}
+                        />
+                      )}
+                      {isMasterAgent && (
+                        <Chip
+                          label="Master"
+                          size="small"
+                          sx={{
+                            bgcolor: '#007AFF',
+                            color: 'white',
+                            fontWeight: 600,
+                            fontSize: '0.7rem',
+                            height: '22px',
+                          }}
+                        />
+                      )}
+                      {!isTopLevelAgent && !isMasterAgent && (
+                        <Chip
+                          label="Notebook"
+                          size="small"
+                          sx={{
+                            bgcolor: '#34C759',
+                            color: 'white',
+                            fontWeight: 600,
+                            fontSize: '0.7rem',
+                            height: '22px',
+                          }}
+                        />
+                      )}
+                    </Box>
+                  </Box>
+                </Box>
+
+                {/* ID Information */}
+                {agent.agent_card && (
+                  <Box
+                    sx={{
+                      pt: 2,
+                      borderTop: '1px solid rgba(0,0,0,0.08)',
+                      display: 'flex',
+                      gap: 2,
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <Typography
+                      variant="caption"
                       sx={{
-                        bgcolor: '#FF6B6B15',
-                        color: '#FF6B6B',
-                        fontWeight: 500,
+                        color: '#86868B',
+                        fontSize: '0.7rem',
+                        fontFamily: 'monospace',
                       }}
-                    />
-                  )}
-                  {isMasterAgent && (
-                    <Chip
-                      label="Master"
-                      size="small"
-                      sx={{
-                        bgcolor: '#007AFF15',
-                        color: '#007AFF',
-                        fontWeight: 500,
-                      }}
-                    />
-                  )}
-                  {!isTopLevelAgent && !isMasterAgent && (
-                    <Chip
-                      label="Notebook"
-                      size="small"
-                      sx={{
-                        bgcolor: '#34C75915',
-                        color: '#34C759',
-                        fontWeight: 500,
-                      }}
-                    />
-                  )}
+                    >
+                      ID: {agent.agent_card.agent_id?.substring(0, 8)}...
+                    </Typography>
+                    {agent.agent_card.parent_agent_id && (
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: '#86868B',
+                          fontSize: '0.7rem',
+                          fontFamily: 'monospace',
+                        }}
+                      >
+                        Parent: {agent.agent_card.parent_agent_id.substring(0, 8)}...
+                      </Typography>
+                    )}
+                  </Box>
+                )}
                 </Box>
               </Box>
 
-              {/* Divider */}
-              <Divider sx={{ mb: 3, borderColor: 'rgba(0,0,0,0.06)' }} />
-
+              {/* Scrollable Content Area */}
+              <Box
+                sx={{
+                  flex: 1,
+                  overflowY: 'auto',
+                  overflowX: 'hidden',
+                  px: 3,
+                  pb: 3,
+                }}
+              >
               {/* Agent Card Header with Advance Mode Button */}
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -367,7 +642,11 @@ function AgentDetailPage() {
                 <Button
                   size="small"
                   variant="outlined"
-                  onClick={() => setShowAdvancedMode(!showAdvancedMode)}
+                  onClick={() => {
+                    setShowAdvancedMode(!showAdvancedMode)
+                    // Also toggle the right side notebook advanced mode to show instructions
+                    setShowNotebookAdvancedMode(!showAdvancedMode)
+                  }}
                   sx={{
                     borderColor: 'rgba(0,0,0,0.2)',
                     color: '#1D1D1F',
@@ -386,48 +665,46 @@ function AgentDetailPage() {
               {/* Display agent_card content */}
               {agent.agent_card ? (
                 <Box>
-                  {/* Title */}
-                  <Box sx={{ mb: 2 }}>
-                    <Typography
-                      variant="h6"
-                      sx={{
-                        fontWeight: 600,
-                        color: '#1D1D1F',
-                        fontSize: '1.1rem',
-                        mb: 1,
-                      }}
-                    >
-                      {agent.agent_type === 'master' ? '👑' : '📓'} {agent.agent_card.title || (agent.agent_type === 'master' ? 'Master Agent' : '未命名笔记本')}
-                    </Typography>
-                    <Box sx={{ display: 'flex', gap: 2, mb: 1 }}>
-                      <Typography variant="caption" sx={{ color: '#86868B', fontSize: '0.75rem' }}>
-                        ID: {agent.agent_card.agent_id?.substring(0, 8)}...
-                      </Typography>
-                      {agent.agent_card.parent_agent_id && (
-                        <Typography variant="caption" sx={{ color: '#86868B', fontSize: '0.75rem' }}>
-                          Parent ID: {agent.agent_card.parent_agent_id.substring(0, 8)}...
-                        </Typography>
-                      )}
-                    </Box>
-                  </Box>
-
                   {/* Description */}
                   {agent.agent_card.description && (
                     <Box sx={{ mb: 3 }}>
-                      <Typography
-                        variant="subtitle2"
+                      <Box
                         sx={{
-                          color: '#86868B',
-                          fontWeight: 600,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          cursor: 'pointer',
                           mb: 1.5,
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.5px',
-                          fontSize: '0.7rem',
+                          '&:hover': {
+                            opacity: 0.8,
+                          },
                         }}
+                        onClick={() => setDescriptionExpanded(!descriptionExpanded)}
                       >
-                        {agent.agent_type === 'master' ? '📚 下辖笔记本简介' : '📝 描述'}
-                      </Typography>
-                      {agent.agent_type === 'master' ? (
+                        <Typography
+                          variant="subtitle1"
+                          sx={{
+                            color: '#86868B',
+                            fontWeight: 600,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px',
+                            fontSize: '0.95rem',
+                          }}
+                        >
+                          {agent.agent_type === 'master' ? '📚 下辖笔记本简介' : '📝 描述'}
+                        </Typography>
+                        <IconButton
+                          size="small"
+                          sx={{
+                            color: '#86868B',
+                            padding: '4px',
+                          }}
+                        >
+                          {descriptionExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                        </IconButton>
+                      </Box>
+                      <Collapse in={descriptionExpanded}>
+                        {agent.agent_type === 'master' ? (
                         // MasterAgent: 显示格式化的笔记本列表
                         <Box>
                           {(() => {
@@ -492,26 +769,50 @@ function AgentDetailPage() {
                           {agent.agent_card.description}
                         </Typography>
                       )}
+                      </Collapse>
                     </Box>
                   )}
 
                   {/* Outline */}
                   {agent.agent_card.outline && Object.keys(agent.agent_card.outline).length > 0 && (
                     <Box sx={{ mb: 3 }}>
-                      <Typography
-                        variant="subtitle2"
-                        sx={{
-                          color: '#86868B',
-                          fontWeight: 600,
-                          mb: 1.5,
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.5px',
-                          fontSize: '0.7rem',
-                        }}
-                      >
-                        📋 大纲
-                      </Typography>
                       <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          cursor: 'pointer',
+                          mb: 1.5,
+                          '&:hover': {
+                            opacity: 0.8,
+                          },
+                        }}
+                        onClick={() => setOutlineExpanded(!outlineExpanded)}
+                      >
+                        <Typography
+                          variant="subtitle1"
+                          sx={{
+                            color: '#86868B',
+                            fontWeight: 600,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px',
+                            fontSize: '0.95rem',
+                          }}
+                        >
+                          📋 大纲
+                        </Typography>
+                        <IconButton
+                          size="small"
+                          sx={{
+                            color: '#86868B',
+                            padding: '4px',
+                          }}
+                        >
+                          {outlineExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                        </IconButton>
+                      </Box>
+                      <Collapse in={outlineExpanded}>
+                        <Box
                         sx={{
                           p: 2.5,
                           bgcolor: '#F5F5F7',
@@ -552,6 +853,7 @@ function AgentDetailPage() {
                           </Box>
                         ))}
                       </Box>
+                      </Collapse>
                     </Box>
                   )}
                 </Box>
@@ -569,12 +871,9 @@ function AgentDetailPage() {
                 </Box>
               )}
 
-              {/* Advanced Mode - Instructions Editor */}
-              <InstructionsEditorInline
-                agentId={agentId}
-                expanded={showAdvancedMode}
-                onToggle={() => setShowAdvancedMode(false)}
-              />
+              {/* Advanced Mode - Instructions Editor (disabled, now controlled by right side) */}
+              {/* InstructionsEditorInline component removed - instructions now shown in right side Notebook Content area */}
+              </Box>
             </Paper>
           </Box>
           ) : null}
@@ -590,84 +889,230 @@ function AgentDetailPage() {
               {/* Notebook Content View for Notebook Agents */}
               <Paper
                 sx={{
-                  p: 3,
+                  display: 'flex',
+                  flexDirection: 'column',
                   bgcolor: 'white',
                   borderRadius: 3,
                   boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+                  maxHeight: 'calc(100vh - 120px)',
+                  overflow: 'hidden',
                 }}
               >
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <NotebookIcon sx={{ color: '#007AFF' }} />
-                    <Typography
-                      variant="h6"
-                      sx={{
-                        fontWeight: 600,
-                        color: '#1D1D1F',
-                      }}
-                    >
-                      Notebook Content
-                    </Typography>
-                  </Box>
-                  
-                  {/* Split Recommendation Button */}
-                  {agent.should_split && (
-                    <Button
-                      variant="outlined"
-                      startIcon={<SplitIcon />}
-                      disabled={splitting}
-                      sx={{
-                        borderColor: '#FF9500',
-                        color: '#FF9500',
-                        '&:hover': {
-                          borderColor: '#FF9500',
-                          bgcolor: '#FF950015',
-                        },
-                        '&:disabled': {
-                          borderColor: '#FF950050',
-                          color: '#FF950050',
-                        },
-                      }}
-                      onClick={async () => {
-                        if (!window.confirm(
-                          `确定要拆分这个笔记本吗？\n\n原因：${agent.split_reason || '章节数或字数超过限制'}\n\n拆分后，当前笔记本将被删除，并创建多个新的笔记本。`
-                        )) {
-                          return
-                        }
-                        
-                        try {
-                          setSplitting(true)
-                          const response = await splitNotebook(agent.id)
-                          
-                          if (response.data?.success) {
-                            // Show success message
-                            alert(`拆分成功！\n\n${response.data.message || '笔记本已成功拆分'}`)
-                            
-                            // Navigate to the new master agent if available
-                            if (response.data.new_master_agent_id) {
-                              navigate(`/agents/${response.data.new_master_agent_id}`)
-                            } else {
-                              // Otherwise, navigate back to agents list
-                              navigate('/agents')
+                {/* Header - Fixed */}
+                <Box
+                  sx={{
+                    flexShrink: 0,
+                    p: 3,
+                    pb: 0,
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      {showChat ? (
+                        <ChatIcon sx={{ color: '#007AFF' }} />
+                      ) : (
+                        <NotebookIcon sx={{ color: '#007AFF' }} />
+                      )}
+                      <Typography
+                        variant="h6"
+                        sx={{
+                          fontWeight: 600,
+                          color: '#1D1D1F',
+                        }}
+                      >
+                        {showChat ? `与 ${agent.notebook_title || agent.agent_name} 对话` : 'Notebook Content'}
+                      </Typography>
+                    </Box>
+                    
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      {/* Instructions View Button */}
+                      {isNotebookAgent && !showChat && !showNotebookAdvancedMode && !showInstructionsView && (
+                        <Button
+                          variant="outlined"
+                          startIcon={<DescriptionIcon />}
+                          onClick={() => {
+                            setShowInstructionsView(true)
+                            if (!instructionsContent) {
+                              loadInstructionsContent()
                             }
-                          } else {
-                            alert(response.data?.message || '拆分失败，请重试')
+                          }}
+                          sx={{
+                            borderColor: '#007AFF',
+                            color: '#007AFF',
+                            '&:hover': {
+                              borderColor: '#0051D5',
+                              bgcolor: 'rgba(0,122,255,0.05)',
+                            },
+                          }}
+                        >
+                          查看 Instructions
+                        </Button>
+                      )}
+
+                      {/* Hide Instructions Button */}
+                      {isNotebookAgent && !showChat && showInstructionsView && (
+                        <Button
+                          variant="outlined"
+                          onClick={() => {
+                            setShowInstructionsView(false)
+                          }}
+                          sx={{
+                            borderColor: '#007AFF',
+                            color: '#007AFF',
+                            '&:hover': {
+                              borderColor: '#0051D5',
+                              bgcolor: 'rgba(0,122,255,0.05)',
+                            },
+                          }}
+                        >
+                          隐藏 Instructions
+                        </Button>
+                      )}
+
+                      {/* Advanced Mode indicator - sync with left side button */}
+                      {isNotebookAgent && !showChat && showNotebookAdvancedMode && !showInstructionsView && (
+                        <Button
+                          variant="outlined"
+                          onClick={() => {
+                            setShowNotebookAdvancedMode(false)
+                            setShowAdvancedMode(false)
+                          }}
+                          sx={{
+                            borderColor: '#007AFF',
+                            color: '#007AFF',
+                            '&:hover': {
+                              borderColor: '#0051D5',
+                              bgcolor: 'rgba(0,122,255,0.05)',
+                            },
+                          }}
+                        >
+                          隐藏 Markdown
+                        </Button>
+                      )}
+
+                      {/* Refresh Button */}
+                      {isNotebookAgent && !showChat && !showNotebookAdvancedMode && !showInstructionsView && (
+                        <Button
+                          variant="outlined"
+                          startIcon={<RefreshIcon />}
+                          onClick={reloadNotebookContent}
+                          sx={{
+                            borderColor: '#86868B',
+                            color: '#1D1D1F',
+                            '&:hover': {
+                              borderColor: '#1D1D1F',
+                              bgcolor: 'rgba(0,0,0,0.05)',
+                            },
+                          }}
+                        >
+                          刷新内容
+                        </Button>
+                      )}
+                      
+                      {/* Chat Toggle Button */}
+                      <Button
+                        variant={showChat ? "contained" : "outlined"}
+                        startIcon={<ChatIcon />}
+                        onClick={() => {
+                          setShowChat(!showChat)
+                          if (showChat) {
+                            setShowNotebookAdvancedMode(false)
+                            setShowAdvancedMode(false)
                           }
-                        } catch (err) {
-                          console.error('Failed to split notebook:', err)
-                          alert(err.response?.data?.detail || err.message || '拆分失败，请重试')
-                        } finally {
-                          setSplitting(false)
-                        }
-                      }}
-                    >
-                      {splitting ? '拆分中...' : '建议拆分'}
-                    </Button>
-                  )}
+                        }}
+                        sx={{
+                          borderColor: '#007AFF',
+                          color: showChat ? 'white' : '#007AFF',
+                          bgcolor: showChat ? '#007AFF' : 'transparent',
+                          '&:hover': {
+                            borderColor: '#007AFF',
+                            bgcolor: showChat ? '#0051D5' : 'rgba(0,122,255,0.05)',
+                          },
+                        }}
+                      >
+                        {showChat ? '隐藏对话' : '与 Agent 对话'}
+                      </Button>
+                      
+                      {/* Split Recommendation Button */}
+                      {agent.should_split && (
+                      <Button
+                        variant="outlined"
+                        startIcon={<SplitIcon />}
+                        disabled={splitting}
+                        sx={{
+                          borderColor: '#FF9500',
+                          color: '#FF9500',
+                          '&:hover': {
+                            borderColor: '#FF9500',
+                            bgcolor: '#FF950015',
+                          },
+                          '&:disabled': {
+                            borderColor: '#FF950050',
+                            color: '#FF950050',
+                          },
+                        }}
+                        onClick={async () => {
+                          if (!window.confirm(
+                            `确定要拆分这个笔记本吗？\n\n原因：${agent.split_reason || '章节数或字数超过限制'}\n\n拆分后，当前笔记本将被删除，并创建多个新的笔记本。`
+                          )) {
+                            return
+                          }
+                          
+                          try {
+                            setSplitting(true)
+                            const response = await splitNotebook(agent.id)
+                            
+                            if (response.data?.success) {
+                              // Show success message
+                              alert(`拆分成功！\n\n${response.data.message || '笔记本已成功拆分'}`)
+                              
+                              // Navigate to the new master agent if available
+                              if (response.data.new_master_agent_id) {
+                                navigate(`/agents/${response.data.new_master_agent_id}`)
+                              } else {
+                                // Otherwise, navigate back to agents list
+                                navigate('/agents')
+                              }
+                            } else {
+                              alert(response.data?.message || '拆分失败，请重试')
+                            }
+                          } catch (err) {
+                            console.error('Failed to split notebook:', err)
+                            alert(err.response?.data?.detail || err.message || '拆分失败，请重试')
+                          } finally {
+                            setSplitting(false)
+                          }
+                        }}
+                      >
+                        {splitting ? '拆分中...' : '建议拆分'}
+                      </Button>
+                    )}
+                  </Box>
+                </Box>
                 </Box>
 
-                {/* Split Warning Alert */}
-                {agent.should_split && (
+                {/* Scrollable Content Area */}
+                <Box
+                  sx={{
+                    flex: 1,
+                    display: showChat ? 'flex' : 'block',
+                    flexDirection: showChat ? 'column' : 'initial',
+                    minHeight: 0,
+                    ...(showChat ? {
+                      // When in chat mode, don't scroll the container, let chat interface handle scrolling
+                      overflow: 'hidden',
+                    } : {
+                      // When showing notebook content, allow scrolling
+                      overflowY: 'auto',
+                      overflowX: 'hidden',
+                      px: 3,
+                      pb: 3,
+                    }),
+                  }}
+                >
+
+                {/* Split Warning Alert - only show when not in chat mode */}
+                {!showChat && agent.should_split && (
                   <Alert
                     severity="warning"
                     icon={<WarningIcon />}
@@ -692,6 +1137,70 @@ function AgentDetailPage() {
                   </Alert>
                 )}
 
+                {/* Instructions View - show when showInstructionsView is enabled */}
+                {!showChat && showInstructionsView && (
+                  <Box>
+                    {loadingInstructionsContent ? (
+                      <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                        <CircularProgress />
+                      </Box>
+                    ) : (
+                      <Box
+                        component="pre"
+                        sx={{
+                          fontFamily: 'Monaco, "Courier New", monospace',
+                          fontSize: '0.875rem',
+                          lineHeight: 1.6,
+                          color: '#1D1D1F',
+                          backgroundColor: '#F5F5F7',
+                          padding: 3,
+                          borderRadius: 2,
+                          border: '1px solid rgba(0,0,0,0.1)',
+                          overflowX: 'auto',
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word',
+                          margin: 0,
+                        }}
+                      >
+                        {instructionsContent || '暂无 instructions'}
+                      </Box>
+                    )}
+                  </Box>
+                )}
+
+                {/* Advanced Mode - Raw Markdown Notebook Content with XML tags - show when either advanced mode is enabled */}
+                {!showChat && !showInstructionsView && (showNotebookAdvancedMode || showAdvancedMode) && (
+                  <Box>
+                    {loadingAdvancedMarkdown ? (
+                      <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                        <CircularProgress />
+                      </Box>
+                    ) : (
+                      <Box
+                        component="pre"
+                        sx={{
+                          fontFamily: 'Monaco, "Courier New", monospace',
+                          fontSize: '0.875rem',
+                          lineHeight: 1.6,
+                          color: '#1D1D1F',
+                          backgroundColor: '#F5F5F7',
+                          padding: 3,
+                          borderRadius: 2,
+                          border: '1px solid rgba(0,0,0,0.1)',
+                          overflowX: 'auto',
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word',
+                          margin: 0,
+                        }}
+                      >
+                        {advancedModeMarkdown || '暂无 notebook content'}
+                      </Box>
+                    )}
+                  </Box>
+                )}
+
+                {/* Notebook Content - only show when not in chat mode, not in advanced mode, and not showing instructions */}
+                {!showChat && !showNotebookAdvancedMode && !showAdvancedMode && !showInstructionsView && (
                 <Box
                   sx={{
                     '& p': {
@@ -862,6 +1371,142 @@ function AgentDetailPage() {
                     </Box>
                   )}
                 </Box>
+                )}
+
+                {/* Chat Interface - only show when in chat mode */}
+                {showChat && (
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      height: 'calc(100vh - 180px)',
+                      maxHeight: 'calc(100vh - 180px)',
+                      width: '100%',
+                      px: 3,
+                      pb: 3,
+                    }}
+                  >
+                    {/* Messages Area */}
+                    <Box
+                      sx={{
+                        flex: 1,
+                        overflowY: 'auto',
+                        mb: 2,
+                        p: 2,
+                        bgcolor: '#F5F5F7',
+                        borderRadius: 2,
+                        minHeight: 0,
+                      }}
+                    >
+                      {chatMessages.length === 0 ? (
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            height: '100%',
+                            color: '#86868B',
+                          }}
+                        >
+                          <Typography variant="body2">
+                            开始与 Agent 对话吧！你可以询问关于笔记本内容的问题。
+                          </Typography>
+                        </Box>
+                      ) : (
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          {chatMessages.map((msg, idx) => (
+                            <Box
+                              key={idx}
+                              sx={{
+                                display: 'flex',
+                                justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                              }}
+                            >
+                              <Paper
+                                sx={{
+                                  p: 2,
+                                  maxWidth: '80%',
+                                  bgcolor: msg.role === 'user' ? '#007AFF' : 'white',
+                                  color: msg.role === 'user' ? 'white' : '#1D1D1F',
+                                  borderRadius: 2,
+                                }}
+                              >
+                                <ReactMarkdown
+                                  remarkPlugins={[remarkGfm, remarkMath]}
+                                  rehypePlugins={[rehypeRaw, rehypeKatex]}
+                                  components={{
+                                    code({ node, inline, className, children, ...props }) {
+                                      const match = /language-(\w+)/.exec(className || '')
+                                      return !inline && match ? (
+                                        <SyntaxHighlighter
+                                          style={prism}
+                                          language={match[1]}
+                                          PreTag="div"
+                                          {...props}
+                                        >
+                                          {String(children).replace(/\n$/, '')}
+                                        </SyntaxHighlighter>
+                                      ) : (
+                                        <code className={className} {...props}>
+                                          {children}
+                                        </code>
+                                      )
+                                    },
+                                  }}
+                                >
+                                  {msg.content}
+                                </ReactMarkdown>
+                              </Paper>
+                            </Box>
+                          ))}
+                          <div ref={chatMessagesEndRef} />
+                        </Box>
+                      )}
+                    </Box>
+                    
+                    {/* Input Area */}
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <TextField
+                        fullWidth
+                        multiline
+                        maxRows={4}
+                        placeholder="输入消息..."
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault()
+                            handleChatSend()
+                          }
+                        }}
+                        disabled={chatSending}
+                        sx={{
+                          '& .MuiOutlinedInput-root': {
+                            borderRadius: 2,
+                          },
+                        }}
+                      />
+                      <Button
+                        variant="contained"
+                        startIcon={<SendIcon />}
+                        onClick={handleChatSend}
+                        disabled={!chatInput.trim() || chatSending}
+                        sx={{
+                          bgcolor: '#007AFF',
+                          '&:hover': {
+                            bgcolor: '#0051D5',
+                          },
+                          '&:disabled': {
+                            bgcolor: '#86868B',
+                          },
+                        }}
+                      >
+                        发送
+                      </Button>
+                    </Box>
+                  </Box>
+                )}
+                </Box>
               </Paper>
           </Box>
           ) : (
@@ -935,4 +1580,3 @@ function AgentDetailPage() {
 }
 
 export default AgentDetailPage
-

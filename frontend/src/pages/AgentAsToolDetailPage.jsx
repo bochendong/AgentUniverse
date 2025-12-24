@@ -92,7 +92,7 @@ function AgentAsToolDetailPage() {
                 cursor: 'pointer',
               }}
             >
-              Tools
+              Skills
             </Link>
             <Typography variant="body2" sx={{ color: '#86868B' }}>
               {tool?.name || 'Loading...'}
@@ -513,7 +513,7 @@ function AgentAsToolDetailPage() {
               </Paper>
             )}
 
-            {/* Tools Section */}
+            {/* Skills Section */}
             {agentDetails?.tools && agentDetails.tools.length > 0 && (
               <Paper
                 sx={{
@@ -597,7 +597,7 @@ function AgentAsToolDetailPage() {
                     mb: 3,
                   }}
                 >
-                  工作原理
+                  Agent Prompt
                 </Typography>
                 <Box
                   sx={{

@@ -8,7 +8,7 @@ from backend.agent.TopLevelAgent import TopLevelAgent
 from backend.agent.MasterAgent import MasterAgent
 from backend.agent.NoteBookAgent import NoteBookAgent
 from backend.agent.BaseAgent import AgentType
-from backend.tools.agent_utils import get_all_agent_info
+from backend.tools.utils import get_all_agent_info
 from backend.database.session_db import create_session
 from backend.utils.tracing_collector import track_agent_run
 from backend.database.agent_db import get_db_path

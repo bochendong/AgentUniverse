@@ -71,7 +71,7 @@ function AgentToolsView({ agentId }) {
             color: '#1D1D1F',
           }}
         >
-          Agent Tools
+          Agent Skills
         </Typography>
         {tools.length > 0 && (
           <Typography
@@ -106,7 +106,7 @@ function AgentToolsView({ agentId }) {
             }}
           >
             <Typography variant="body2" sx={{ color: '#86868B' }}>
-              点击左侧层级图中的 agent 查看其 tools
+              点击左侧层级图中的 agent 查看其 skills
             </Typography>
           </Box>
         ) : tools.length === 0 ? (
@@ -117,7 +117,7 @@ function AgentToolsView({ agentId }) {
             }}
           >
             <Typography variant="body2" sx={{ color: '#86868B', fontStyle: 'italic' }}>
-              该 agent 没有 tools
+              该 agent 没有 skills
             </Typography>
           </Box>
         ) : (

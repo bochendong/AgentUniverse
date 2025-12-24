@@ -5,7 +5,7 @@ from backend.database.agent_db import load_agent, delete_agent
 from backend.agent.NoteBookAgent import NoteBookAgent
 from backend.agent.BaseAgent import AgentType
 from backend.api.utils import _serialize_agent_card
-from backend.tools.agent_utils import generate_markdown_from_agent
+from backend.tools.utils import generate_markdown_from_agent
 
 router = APIRouter(prefix="/api/notebooks", tags=["notebooks"])
 
@@ -59,10 +59,26 @@ async def get_notebook(notebook_id: str):
 
 
 @router.get("/{notebook_id}/content")
-async def get_notebook_content(notebook_id: str):
-    """Get notebook content as structured data (JSON) or markdown fallback."""
+async def get_notebook_content(notebook_id: str, format: str = None):
+    """Get notebook content as structured data (JSON) or markdown fallback.
+    
+    Args:
+        notebook_id: The notebook ID
+        format: Optional format parameter. If set to 'markdown', always returns markdown format with XML tags.
+                Otherwise returns structured data if available, or markdown as fallback.
+    """
     try:
-        agent = load_agent(notebook_id)
+        # Clear cache to ensure we get the latest data from database
+        try:
+            from backend.utils.agent_manager import get_agent_manager
+            get_agent_manager().clear_cache(notebook_id)
+        except Exception:
+            pass  # If AgentManager is not available, continue with load_agent
+        
+        # Force reload from database (bypass any potential caching)
+        agent = load_agent(notebook_id, db_path=None)
+        
+        # Verify agent was loaded correctly
         if not agent:
             raise HTTPException(status_code=404, detail="Notebook not found")
         
@@ -77,8 +93,20 @@ async def get_notebook_content(notebook_id: str):
                 detail=f"Agent is not a NoteBookAgent (type: {agent_type_str}). Use /api/agents/{notebook_id} for agent details."
             )
         
+        # If format is explicitly requested as markdown, always return markdown
+        if format and format.lower() == 'markdown':
+            content = generate_markdown_from_agent(agent, include_ids=True)
+            return {
+                "format": "markdown",
+                "content": content
+            }
+        
         # Return structured data if available
-        if hasattr(agent, 'outline') and hasattr(agent, 'sections') and agent.outline and agent.sections:
+        # Important: Check if sections is not empty (after modify_notes, sections might be cleared)
+        has_sections = hasattr(agent, 'sections') and agent.sections and len(agent.sections) > 0
+        has_outline = hasattr(agent, 'outline') and agent.outline
+        
+        if has_outline and has_sections:
             # Convert Pydantic models to dict for JSON serialization
             outline_dict = {
                 "notebook_title": agent.outline.notebook_title,
@@ -208,6 +236,8 @@ async def delete_notebook(notebook_id: str):
             parent = load_agent(agent.parent_agent_id)
             if parent:
                 parent._remove_sub_agent_by_id(notebook_id)
+                # Ensure parent is saved after removing sub_agent
+                parent.save_to_db()
         
         # Delete the agent
         deleted = delete_agent(notebook_id)

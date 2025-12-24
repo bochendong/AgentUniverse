@@ -15,6 +15,7 @@ class AgentType(Enum):
     BASE_AGENT = "Base Agent"
     MASTER = "Master"
     NOTEBOOK = "NoteBook"
+    NOTEBOOK_MODIFY = "NoteBookModify"
     TOP_LEVEL = "TopLevel"
     
     def __str__(self) -> str:
@@ -68,12 +69,22 @@ class BaseAgent(Agent):
         self.type = agent_type
         self.DB_PATH = DB_PATH
         
+        # Get model name from config
+        from backend.config.model_config import get_model_name
+        model_name = get_model_name()
+        
+        # Debug: Print model being used (only for TopLevelAgent to avoid spam)
+        if agent_type == AgentType.TOP_LEVEL:
+            print(f"[BaseAgent] TopLevelAgent 使用模型: {model_name}")
+        
         # Initialize the base Agent class
+        # 直接使用 model 参数，SDK 会自动为 GPT-5 模型应用默认的 reasoning 和 verbosity 设置
         super().__init__(
             name=name,
             instructions=instructions,
             tools=tools or [],
-            mcp_config=mcp_config or {}
+            mcp_config=mcp_config or {},
+            model=model_name
         )
     
     def _get_db_manager(self) -> AgentDBManager:
@@ -88,7 +99,7 @@ class BaseAgent(Agent):
     def _recreate_tools_from_db(self, tool_ids: List[str], db_path: Optional[str] = None):
         """
         Recreate tools from database using tool IDs.
-
+        
         Args:
             tool_ids: List of tool names/IDs from database
             db_path: Optional database path
@@ -318,7 +329,11 @@ class BaseAgent(Agent):
             sub_agent_ids.remove(id)
             self.sub_agent_ids = sub_agent_ids
             # Save to database after removing
+            # IMPORTANT: Must save to ensure parent's sub_agent_ids is updated in database
             self.save_to_db()
+            print(f"[_remove_sub_agent_by_id] Removed {id} from {self.id}.sub_agent_ids. New list: {self.sub_agent_ids}")
+        else:
+            print(f"[_remove_sub_agent_by_id] Warning: {id} not found in {self.id}.sub_agent_ids (current: {sub_agent_ids})")
 
     def save_to_db(self) -> None:
         """

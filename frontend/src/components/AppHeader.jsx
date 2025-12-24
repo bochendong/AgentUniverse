@@ -15,7 +15,6 @@ import {
 import {
   SmartToy as AgentsIcon,
   Chat as ChatIcon,
-  Info as InfoIcon,
   Settings as SettingsIcon,
   AccountCircle as AccountIcon,
   Login as LoginIcon,
@@ -135,24 +134,6 @@ function AppHeader() {
           </Button>
           
           <Button
-            startIcon={<InfoIcon />}
-            onClick={() => navigate('/top-level-agent')}
-            sx={{
-              color: isDark ? '#ececf1' : '#1D1D1F',
-              textTransform: 'none',
-              fontWeight: 500,
-              bgcolor: isActive('/top-level-agent') 
-                ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)') 
-                : 'transparent',
-              '&:hover': {
-                bgcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
-              },
-            }}
-          >
-            TopLevelAgent
-          </Button>
-          
-          <Button
             startIcon={<ToolsIcon />}
             onClick={() => navigate('/tools')}
             sx={{
@@ -167,7 +148,7 @@ function AppHeader() {
               },
             }}
           >
-            Tools
+            Skills
           </Button>
         </Box>
 

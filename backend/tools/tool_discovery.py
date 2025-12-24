@@ -17,7 +17,7 @@ def discover_and_register_tools():
     # Import agent_tools module to trigger registration
     # All tools are registered via decorators when the module is imported
     try:
-        import backend.tools.agent_tools  # noqa: F401
+        import backend.tools.function_tools  # noqa: F401
         logger.info("Loaded tools from agent_tools")
     except Exception as e:
         logger.warning(f"Failed to load agent_tools: {e}")
@@ -26,7 +26,8 @@ def discover_and_register_tools():
     try:
         # Import the registration module which registers all specialized agents
         # The module will auto-register when imported
-        import backend.tools.register_specialized_agents  # noqa: F401
+        from backend.tools.utils import register_all_specialized_agents
+        register_all_specialized_agents()
         logger.info("Loaded specialized agents as tools")
     except Exception as e:
         logger.warning(f"Failed to load specialized agents: {e}")

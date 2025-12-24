@@ -10,6 +10,7 @@ import {
 } from '@mui/material'
 import {
   ArrowBack as BackIcon,
+  SmartToy as AgentsIcon,
 } from '@mui/icons-material'
 import { listAgents } from '../api/client'
 import AgentCard from '../components/AgentCard'
@@ -74,6 +75,43 @@ function AgentsListPage() {
       }}
     >
       <Container maxWidth="xl" sx={{ py: 4 }}>
+        {/* Header */}
+        <Box sx={{ mb: 4 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+            <Box
+              sx={{
+                bgcolor: '#007AFF',
+                borderRadius: 2,
+                p: 1.5,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <AgentsIcon sx={{ color: 'white', fontSize: 32 }} />
+            </Box>
+            <Box>
+              <Typography
+                variant="h4"
+                sx={{
+                  fontWeight: 700,
+                  color: '#1D1D1F',
+                  mb: 0.5,
+                }}
+              >
+                Agents
+              </Typography>
+              <Typography
+                variant="body1"
+                sx={{
+                  color: '#86868B',
+                }}
+              >
+                查看系统中所有可用的 agents，了解它们的功能、配置和使用方法
+              </Typography>
+            </Box>
+          </Box>
+        </Box>
 
         {error && (
           <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>

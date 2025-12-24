@@ -3,8 +3,8 @@
 from typing import Dict, Any, Optional
 
 from backend.agent.BaseAgent import BaseAgent, AgentType
-from backend.agent.specialized.AgentCard import AgentCard
-from backend.tools.agent_utils import get_all_agent_info
+from backend.models import AgentCard
+from backend.tools.utils import get_all_agent_info
 from backend.prompts.prompt_loader import load_prompt
 
 
@@ -62,6 +62,32 @@ class MasterAgent(BaseAgent):
         # Default tool IDs for MasterAgent
         default_tool_ids = ['send_message', 'add_notebook_by_file', 'create_notebook', 'create_notebook_with_outline']
         self._recreate_tools_from_db(default_tool_ids)
+        
+        # Ensure tool_ids are saved to database (important for API to return correct tools)
+        import json
+        import sqlite3
+        from backend.database.agent_db import get_db_path
+        db_path = get_db_path(self.DB_PATH if hasattr(self, 'DB_PATH') else None)
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        tool_ids_json = json.dumps(default_tool_ids, ensure_ascii=False)
+        cursor.execute(
+            "UPDATE agents SET tool_ids = ? WHERE id = ?",
+            (tool_ids_json, self.id)
+        )
+        conn.commit()
+        conn.close()
+        print(f"[MasterAgent._recreate_tools] Saved tool_ids to database: {default_tool_ids}")
+        
+        # Update instructions after recreating tools (to ensure latest prompt with current agents_list)
+        agent_dict = self._load_sub_agents_dict()
+        instructions = load_prompt(
+            "master_agent",
+            variables={"agents_list": get_all_agent_info(agent_dict)},
+            tool_ids=default_tool_ids
+        )
+        self.instructions = instructions
+        print(f"[MasterAgent._recreate_tools] Updated instructions (length: {len(instructions)})")
 
     def _load_sub_agents_dict(self) -> Dict[str, Any]:
         """

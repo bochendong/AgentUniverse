@@ -4,7 +4,6 @@ import {
   Typography,
   TextField,
   Button,
-  Divider,
   Alert,
   Tabs,
   Tab,
@@ -16,7 +15,15 @@ import {
   Refresh as RefreshIcon,
   Code as CodeIcon,
   ExpandLess as ExpandLessIcon,
+  Visibility as VisibilityIcon,
 } from '@mui/icons-material'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import 'katex/dist/katex.min.css'
 
 /**
  * InstructionsEditorInline Component
@@ -28,7 +35,7 @@ function InstructionsEditorInline({ agentId, expanded, onToggle }) {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
-  const [tabValue, setTabValue] = useState(0) // 0: current, 1: default
+  const [tabValue, setTabValue] = useState(0) // 0: current/edit, 1: preview, 2: default
   const [wasIncomplete, setWasIncomplete] = useState(false)
 
   useEffect(() => {
@@ -165,7 +172,12 @@ function InstructionsEditorInline({ agentId, expanded, onToggle }) {
                     },
                   }}
                 >
-                  <Tab label="当前 Instructions" />
+                  <Tab label="编辑" />
+                  <Tab 
+                    label="渲染预览" 
+                    icon={<VisibilityIcon sx={{ fontSize: 16 }} />}
+                    iconPosition="start"
+                  />
                   <Tab label="默认 Instructions（只读）" />
                 </Tabs>
 
@@ -216,6 +228,104 @@ function InstructionsEditorInline({ agentId, expanded, onToggle }) {
                         },
                       }}
                     />
+                  ) : tabValue === 1 ? (
+                    <Box
+                      sx={{
+                        flex: 1,
+                        overflow: 'auto',
+                        p: 3,
+                        bgcolor: 'white',
+                        borderRadius: 1,
+                        border: '1px solid rgba(0,0,0,0.1)',
+                        '& p': {
+                          margin: '0.5em 0',
+                          color: '#1D1D1F',
+                          lineHeight: 1.6,
+                        },
+                        '& h1, & h2, & h3, & h4, & h5, & h6': {
+                          marginTop: '1em',
+                          marginBottom: '0.5em',
+                          fontWeight: 600,
+                          color: '#1D1D1F',
+                        },
+                        '& code': {
+                          backgroundColor: 'rgba(0, 0, 0, 0.05)',
+                          padding: '2px 4px',
+                          borderRadius: '3px',
+                          fontSize: '0.9em',
+                          fontFamily: 'Monaco, "Courier New", monospace',
+                        },
+                        '& a': {
+                          color: '#007AFF',
+                          textDecoration: 'none',
+                          '&:hover': {
+                            textDecoration: 'underline',
+                          },
+                        },
+                        '& ul, & ol': {
+                          paddingLeft: '1.5em',
+                          margin: '0.5em 0',
+                        },
+                        '& li': {
+                          margin: '0.25em 0',
+                        },
+                        '& blockquote': {
+                          borderLeft: '4px solid #007AFF',
+                          paddingLeft: '1em',
+                          margin: '1em 0',
+                          color: '#86868B',
+                          fontStyle: 'italic',
+                        },
+                        '& table': {
+                          borderCollapse: 'collapse',
+                          width: '100%',
+                          margin: '1em 0',
+                          '& th, & td': {
+                            border: '1px solid rgba(0,0,0,0.1)',
+                            padding: '8px',
+                            textAlign: 'left',
+                          },
+                          '& th': {
+                            backgroundColor: 'rgba(0,0,0,0.03)',
+                            fontWeight: 600,
+                          },
+                        },
+                      }}
+                    >
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkMath]}
+                        rehypePlugins={[rehypeKatex]}
+                        components={{
+                          code({ node, inline, className, children, ...props }) {
+                            const match = /language-(\w+)/.exec(className || '')
+                            return !inline && match ? (
+                              <SyntaxHighlighter
+                                style={oneLight}
+                                language={match[1]}
+                                PreTag="div"
+                                customStyle={{
+                                  backgroundColor: 'white',
+                                  border: '1px solid rgba(0,0,0,0.1)',
+                                  borderRadius: '6px',
+                                  padding: '12px',
+                                  margin: '0.5em 0',
+                                  fontSize: '0.875rem',
+                                }}
+                                {...props}
+                              >
+                                {String(children).replace(/\n$/, '')}
+                              </SyntaxHighlighter>
+                            ) : (
+                              <code className={className} {...props}>
+                                {children}
+                              </code>
+                            )
+                          },
+                        }}
+                      >
+                        {instructions || '暂无 instructions'}
+                      </ReactMarkdown>
+                    </Box>
                   ) : (
                     <Box
                       sx={{

@@ -2,25 +2,7 @@
 
 from typing import List
 from agents import Agent, Runner, AgentOutputSchema
-from pydantic import BaseModel, ConfigDict
-
-
-class NotebookSplit(BaseModel):
-    """单个拆分后的 Notebook 计划"""
-    model_config = ConfigDict(strict=False)
-    
-    notebook_title: str  # 新 Notebook 的标题
-    notebook_description: str  # 新 Notebook 的描述（说明包含什么知识、不包含什么知识、知识边界）
-    section_titles: List[str]  # 包含的章节标题列表
-
-
-class SplitPlan(BaseModel):
-    """拆分计划"""
-    model_config = ConfigDict(strict=False)
-    
-    master_agent_title: str  # 新 MasterAgent 的标题
-    master_agent_description: str  # 新 MasterAgent 的描述
-    notebooks: List[NotebookSplit]  # 拆分后的 Notebook 列表
+from backend.models import NotebookSplit, SplitPlan
 
 
 class SplitPlanAgent(Agent):
@@ -106,8 +88,15 @@ class SplitPlanAgent(Agent):
 - 每个 Notebook 的描述应该清晰明确，至少 100 字
 """
         
+        # Get model settings from config
+        from backend.config.model_config import get_model_settings, get_model_name
+        model_name = get_model_name()
+        model_settings = get_model_settings()
+        
         super().__init__(
             name="SplitPlanAgent",
             instructions=instructions,
-            output_type=AgentOutputSchema(SplitPlan, strict_json_schema=False)
+            output_type=AgentOutputSchema(SplitPlan, strict_json_schema=False),
+            model=model_name,  # 显式传递 model 参数
+            model_settings=model_settings
         )

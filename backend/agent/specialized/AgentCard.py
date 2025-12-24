@@ -1,15 +1,10 @@
-"""Agent Card data structure."""
+"""Compatibility layer for old pickled objects - 兼容旧版本的序列化对象
 
-from typing import Optional, Dict
-from pydantic import BaseModel, ConfigDict
+这个文件是为了兼容数据库中旧的序列化对象而保留的。
+新的代码应该直接从 backend.models 导入。
+"""
 
+# Re-export AgentCard from backend.models for backward compatibility
+from backend.models import AgentCard
 
-class AgentCard(BaseModel):
-    """Agent Card data structure for displaying agent information."""
-    model_config = ConfigDict(strict=False)
-    
-    title: str  # Notebook title
-    agent_id: str  # Agent ID
-    parent_agent_id: Optional[str] = None  # Parent agent ID
-    description: str  # Notebook description
-    outline: Dict[str, str]  # Section titles and descriptions
+__all__ = ["AgentCard"]

@@ -6,6 +6,9 @@ const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
   },
 })
 
@@ -19,9 +22,16 @@ export const getAgentParent = (agentId) =>
 
 // Notebooks
 export const getNotebook = (notebookId) => api.get(`/api/notebooks/${notebookId}`)
-export const getNotebookContent = (notebookId) => 
-  api.get(`/api/notebooks/${notebookId}/content`)
+export const getNotebookContent = (notebookId, format = null) => {
+  const url = `/api/notebooks/${notebookId}/content`
+  const params = format ? { params: { format } } : {}
+  return api.get(url, params)
+}
 export const deleteNotebook = (notebookId) => api.delete(`/api/notebooks/${notebookId}`)
+// Generic agent deletion (works for both MasterAgent and NoteBookAgent)
+export const deleteAgent = (agentId) => api.delete(`/api/agents/${agentId}`)
+// Reset database to initial state
+export const resetDatabase = () => api.post('/api/agents/reset-database')
 export const splitNotebook = (notebookId) => api.post(`/api/notebooks/${notebookId}/split`)
 
 // TopLevelAgent Chat
@@ -90,6 +100,11 @@ export const updateAgentInstructions = (agentId, instructions) => {
 // Agent Tools
 export const getAgentTools = (agentId) => {
   return api.get(`/api/agents/${agentId}/tools`)
+}
+
+// Agent Chat
+export const chatWithAgent = (agentId, message, sessionId = null) => {
+  return api.post(`/api/agents/${agentId}/chat`, { message, session_id: sessionId })
 }
 
 // Tools

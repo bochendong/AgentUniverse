@@ -403,17 +403,9 @@ export default function ExerciseBlock({ exercise }) {
                 <Typography variant="body2" sx={{ fontWeight: 600, mb: 1, mt: 1, color: '#1D1D1F' }}>
                   答案：
                 </Typography>
-                <Typography 
-                  variant="body1" 
-                  sx={{ 
-                    color: '#1D1D1F', 
-                    lineHeight: 1.6, 
-                    whiteSpace: 'pre-line', 
-                    mb: exercise.proof ? 2 : 0,
-                  }}
-                >
+                <MarkdownText variant="body1" fontSize="0.875rem" sx={{ mb: exercise.proof ? 2 : 0 }}>
                   {exercise.answer}
-                </Typography>
+                </MarkdownText>
               </>
             )}
             {exercise.proof && (

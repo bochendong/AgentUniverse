@@ -1,7 +1,7 @@
 """File upload API routes."""
 
 from fastapi import APIRouter, HTTPException, UploadFile, File
-from backend.tools.file_storage import save_uploaded_file, ensure_upload_dir
+from backend.tools.utils import save_uploaded_file, ensure_upload_dir
 import os
 
 router = APIRouter(prefix="/api", tags=["upload"])

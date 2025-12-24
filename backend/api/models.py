@@ -31,7 +31,7 @@ class ConversationsResponse(BaseModel):
 
 class TracingResponse(BaseModel):
     traces: List[Dict]
-    current_activity: Optional[str] = None
+    current_activity: Optional[Dict] = None
 
 
 class UpdateInstructionsRequest(BaseModel):

@@ -17,7 +17,7 @@ import {
   Delete as DeleteIcon,
 } from '@mui/icons-material'
 import AgentAvatar from './AgentAvatar'
-import { deleteNotebook, getAgent } from '../api/client'
+import { deleteNotebook, deleteAgent, getAgent } from '../api/client'
 
 /**
  * Agent Card - Neon Edge Card with Apple Style
@@ -61,7 +61,13 @@ function AgentCard({ agent, onClick, onDelete }) {
         console.warn('Failed to get agent info before delete:', err)
       }
       
-      await deleteNotebook(agent.notebook_id)
+      // Use generic deleteAgent API for MasterAgent, deleteNotebook for NoteBookAgent
+      // Both APIs handle removing from parent's sub_agent_ids correctly
+      if (isMasterAgent) {
+        await deleteAgent(agent.notebook_id)
+      } else {
+        await deleteNotebook(agent.notebook_id)
+      }
       setDeleteDialogOpen(false)
       if (onDelete) {
         onDelete(agent.notebook_id)

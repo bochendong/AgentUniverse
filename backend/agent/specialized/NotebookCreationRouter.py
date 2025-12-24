@@ -4,14 +4,14 @@ from typing import Optional, Tuple
 from agents import Agent, Runner, function_tool
 
 from backend.agent.NoteBookAgent import NoteBookAgent
-from backend.agent.specialized.IntentExtractionAgent import IntentExtractionAgent
+from backend.tools.agent_as_tools.IntentExtractionAgent import IntentExtractionAgent
 from backend.agent.specialized.NotebookCreationStrategies import (
     create_full_content_notebook,
     create_enhanced_notebook,
     create_knowledge_base_notebook,
     create_outline_first_notebook
 )
-from backend.agent.specialized.NotebookModels import (
+from backend.models import (
     NotebookCreationIntent,
     Outline
 )
@@ -66,8 +66,8 @@ class NotebookCreationRouter:
         
         # 步骤2: 根据意图类型生成相应的大纲
         from agents import Agent, AgentOutputSchema
-        from backend.agent.specialized.NotebookModels import Outline
-        from backend.agent.specialized.NoteBookCreator import get_file_content
+        from backend.models import Outline
+        from backend.tools.agent_as_tools.section_creators.utils import get_file_content
         
         if intent.intent_type == "knowledge_base":
             # 知识库类型：生成知识库结构大纲
@@ -76,8 +76,14 @@ class NotebookCreationRouter:
             
             file_content = get_file_content(file_path)
             
+            # Get model settings from config
+            from backend.config.model_config import get_model_settings, get_model_name
+            model_name = get_model_name()
+            model_settings = get_model_settings()
+            
             outline_agent = Agent(
                 name="KnowledgeBaseOutlineAgent",
+                model=model_name,  # 显式传递 model 参数
                 instructions=f"""
 你是一个知识库内容分析专家。请分析文档内容，生成一个知识库结构（不是学习材料，而是知识记录）。
 
@@ -113,7 +119,8 @@ class NotebookCreationRouter:
   }}
 }}
 """,
-                output_type=AgentOutputSchema(Outline, strict_json_schema=False)
+                output_type=AgentOutputSchema(Outline, strict_json_schema=False),
+                model_settings=model_settings
             )
             
             outline_result = await Runner.run(
@@ -123,7 +130,7 @@ class NotebookCreationRouter:
             
         elif file_path:
             # 有文件：使用OutlineMakerAgent从文件生成大纲
-            from backend.agent.specialized.NoteBookCreator import OutlineMakerAgent
+            from backend.tools.agent_as_tools.NotebookCreator import OutlineMakerAgent
             outline_agent = OutlineMakerAgent(file_path)
             outline_result = await Runner.run(
                 outline_agent, 
@@ -133,8 +140,15 @@ class NotebookCreationRouter:
             # 没有文件：从主题生成大纲
             topic = intent.topic_or_theme or user_request.strip()[:100]
             
+            # Get model settings from config
+            from backend.config.model_config import get_model_settings, get_model_name
+            model_name = get_model_name()
+            model_settings = get_model_settings()
+            print(f"[TopicOutlineAgent] 使用模型: {model_name}")
+            
             outline_agent = Agent(
                 name="TopicOutlineAgent",
+                model=model_name,  # 显式传递 model 参数
                 instructions=f"""
 你是一个专业的学习内容规划专家。请根据用户提供的主题，草拟一个学习大纲。
 
@@ -169,7 +183,8 @@ class NotebookCreationRouter:
   }}
 }}
 """,
-                output_type=AgentOutputSchema(Outline, strict_json_schema=False)
+                output_type=AgentOutputSchema(Outline, strict_json_schema=False),
+                model_settings=model_settings
             )
             
             outline_result = await Runner.run(

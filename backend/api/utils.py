@@ -4,7 +4,7 @@ from typing import Optional
 from backend.agent.TopLevelAgent import TopLevelAgent
 from backend.agent.MasterAgent import MasterAgent
 from backend.database.agent_db import load_all_agents
-from backend.agent.specialized.AgentCard import AgentCard
+from backend.models import AgentCard
 
 
 def _serialize_agent_card(agent_card_result):
@@ -39,6 +39,9 @@ def get_top_level_agent() -> TopLevelAgent:
         if top_level_agent_id:
             # Wake up existing TopLevelAgent
             _top_level_agent = wake_agent(top_level_agent_id)
+            # Force update model settings for TopLevelAgent (important: may have old model from DB)
+            from backend.utils.agent_manager import get_agent_manager
+            get_agent_manager()._update_model_settings(_top_level_agent)
         else:
             # Create new one
             _top_level_agent = TopLevelAgent()
@@ -109,7 +112,7 @@ def get_top_level_agent() -> TopLevelAgent:
             print(f"[get_top_level_agent] Created new MasterAgent: {master_agent_id}")
             # Update instructions
             agent_dict = _top_level_agent._load_sub_agents_dict()
-            from backend.tools.agent_utils import get_all_agent_info
+            from backend.tools.utils import get_all_agent_info
             from backend.prompts.prompt_loader import load_prompt
             instructions = load_prompt(
                 "top_level_agent",
@@ -195,9 +198,13 @@ def get_top_level_agent() -> TopLevelAgent:
     
     # Ensure tools is not None (AgentManager should have done this, but double-check)
     from backend.utils.agent_manager import get_agent_manager
-    get_agent_manager()._ensure_tools_restored(_top_level_agent)
+    agent_manager = get_agent_manager()
+    agent_manager._ensure_tools_restored(_top_level_agent)
+    
+    # Ensure model settings are up-to-date (important: agents loaded from DB may have old model)
+    agent_manager._update_model_settings(_top_level_agent)
     
     # Save any modifications at the end (only if actually modified)
-    get_agent_manager().save_if_modified(_top_level_agent)
+    agent_manager.save_if_modified(_top_level_agent)
     
     return _top_level_agent

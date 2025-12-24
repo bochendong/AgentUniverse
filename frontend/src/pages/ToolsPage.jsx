@@ -1,21 +1,28 @@
 import React, { useState, useEffect } from 'react'
-import { Box, Container, Typography, Grid, CircularProgress, Alert, Tabs, Tab } from '@mui/material'
+import { Box, Container, Typography, Grid, CircularProgress, Alert, Tabs, Tab, Pagination } from '@mui/material'
 import { Build as BuildIcon } from '@mui/icons-material'
 import { listTools } from '../api/client'
 import ToolCard from '../components/ToolCard'
 
 /**
- * ToolsPage Component - Display all function tools
+ * ToolsPage Component - Display all function skills
  */
 function ToolsPage() {
   const [tools, setTools] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [selectedAgentType, setSelectedAgentType] = useState('all')
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 6
 
   useEffect(() => {
     loadTools()
   }, [])
+
+  // Reset to page 1 when filter changes
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [selectedAgentType])
 
   const loadTools = async () => {
     try {
@@ -45,6 +52,18 @@ function ToolsPage() {
   const filteredTools = selectedAgentType === 'all'
     ? tools
     : tools.filter(tool => tool.agent_type === selectedAgentType)
+
+  // Calculate pagination
+  const totalPages = Math.ceil(filteredTools.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const paginatedTools = filteredTools.slice(startIndex, endIndex)
+
+  const handlePageChange = (event, value) => {
+    setCurrentPage(value)
+    // Scroll to top when page changes
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   return (
     <Box
@@ -81,7 +100,7 @@ function ToolsPage() {
                   mb: 0.5,
                 }}
               >
-                Tools
+                Skills
               </Typography>
               <Typography
                 variant="body1"
@@ -89,7 +108,7 @@ function ToolsPage() {
                   color: '#86868B',
                 }}
               >
-                查看系统中所有可用的 tools，了解它们的调用方法、输入输出类型和任务描述
+                查看系统中所有可用的 skills，了解它们的调用方法、输入输出类型和任务描述
               </Typography>
             </Box>
           </Box>
@@ -148,13 +167,45 @@ function ToolsPage() {
                 </Typography>
               </Box>
             ) : (
-              <Grid container spacing={3}>
-                {filteredTools.map((tool) => (
-                  <Grid item xs={12} sm={6} md={4} key={tool.id}>
-                    <ToolCard tool={tool} />
-                  </Grid>
-                ))}
-              </Grid>
+              <>
+                <Grid container spacing={3}>
+                  {paginatedTools.map((tool) => (
+                    <Grid item xs={12} sm={6} md={4} key={tool.id}>
+                      <ToolCard tool={tool} />
+                    </Grid>
+                  ))}
+                </Grid>
+
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      justifyContent: 'center',
+                      mt: 4,
+                      mb: 2,
+                    }}
+                  >
+                    <Pagination
+                      count={totalPages}
+                      page={currentPage}
+                      onChange={handlePageChange}
+                      color="primary"
+                      size="large"
+                      showFirstButton
+                      showLastButton
+                      sx={{
+                        '& .MuiPaginationItem-root': {
+                          fontSize: '1rem',
+                        },
+                        '& .Mui-selected': {
+                          fontWeight: 600,
+                        },
+                      }}
+                    />
+                  </Box>
+                )}
+              </>
             )}
           </>
         )}
