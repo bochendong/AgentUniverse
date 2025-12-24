@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="imgs/cover.png" alt="AgentUniverse Cover" width="100%">
+</div>
+
 <h4 align="center">🤖 你的智能笔记生成助手</h4>
 
 <p align="center">
