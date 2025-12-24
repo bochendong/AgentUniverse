@@ -1,8 +1,4 @@
-<div align="center">
-  <img src="imgs/cover.png" alt="AgentUniverse Cover" width="100%">
-</div>
-
-<h4 align="center">🤖 你的智能笔记生成助手</h4>
+# AgentUniverse
 
 <p align="center">
   <a href="https://github.com/yourusername/AgentUniverse/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?label=License&style=flat-square" alt="License" /></a>
@@ -15,6 +11,14 @@
   <a href="https://twitter.com/yourusername"><img src="https://img.shields.io/twitter/follow/yourusername?style=flat-square&logo=twitter&color=1DA1F2" alt="Twitter Follow" /></a>
   <a href="https://github.com/yourusername/AgentUniverse"><img src="https://img.shields.io/github/last-commit/yourusername/AgentUniverse?style=flat-square&logo=git" alt="Last Commit" /></a>
 </p>
+
+
+<div align="center">
+  <img src="imgs/cover.png" alt="AgentUniverse Cover" width="100%">
+</div>
+
+<h4 align="center">🤖 你的智能笔记生成助手</h4>
+
 
 <p align="center">
   <strong>基于多层级 AI Agent 架构的智能笔记生成与管理平台</strong>
