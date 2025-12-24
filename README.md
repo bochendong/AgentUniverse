@@ -1,17 +1,19 @@
 # AgentUniverse
 
+[English](README_EN.md) | 中文
+
 <h4 align="center">🤖 你的智能笔记生成助手</h4>
 
 <p align="center">
-  <a href="https://github.com/yourusername/AgentUniverse/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?label=License&style=flat-square" alt="License" /></a>
-  <a href="https://github.com/yourusername/AgentUniverse/blob/main/CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square" alt="PRs Welcome" /></a>
-  <a href="https://github.com/yourusername/AgentUniverse"><img src="https://img.shields.io/github/stars/yourusername/AgentUniverse?style=flat-square&logo=github" alt="GitHub Stars" /></a>
-  <a href="https://github.com/yourusername/AgentUniverse"><img src="https://img.shields.io/github/forks/yourusername/AgentUniverse?style=flat-square&logo=github" alt="GitHub Forks" /></a>
-  <a href="https://github.com/yourusername/AgentUniverse/issues"><img src="https://img.shields.io/github/issues/yourusername/AgentUniverse?style=flat-square&logo=github" alt="GitHub Issues" /></a>
+  <a href="https://github.com/bochendong/AgentUniverse/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?label=License&style=flat-square" alt="License" /></a>
+  <a href="https://github.com/bochendong/AgentUniverse/blob/main/CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square" alt="PRs Welcome" /></a>
+  <a href="https://github.com/bochendong/AgentUniverse"><img src="https://img.shields.io/github/stars/bochendong/AgentUniverse?style=flat-square&logo=github" alt="GitHub Stars" /></a>
+  <a href="https://github.com/bochendong/AgentUniverse"><img src="https://img.shields.io/github/forks/bochendong/AgentUniverse?style=flat-square&logo=github" alt="GitHub Forks" /></a>
+  <a href="https://github.com/bochendong/AgentUniverse/issues"><img src="https://img.shields.io/github/issues/bochendong/AgentUniverse?style=flat-square&logo=github" alt="GitHub Issues" /></a>
   <br>
   <a href="https://discord.gg/your-invite-link"><img src="https://img.shields.io/discord/your-server-id?label=Discord&logo=discord&style=flat-square&color=5865F2" alt="Discord" /></a>
   <a href="https://twitter.com/yourusername"><img src="https://img.shields.io/twitter/follow/yourusername?style=flat-square&logo=twitter&color=1DA1F2" alt="Twitter Follow" /></a>
-  <a href="https://github.com/yourusername/AgentUniverse"><img src="https://img.shields.io/github/last-commit/yourusername/AgentUniverse?style=flat-square&logo=git" alt="Last Commit" /></a>
+  <a href="https://github.com/bochendong/AgentUniverse"><img src="https://img.shields.io/github/last-commit/bochendong/AgentUniverse?style=flat-square&logo=git" alt="Last Commit" /></a>
 </p>
 
 
@@ -66,7 +68,7 @@ TopLevelAgent → MasterAgent → NotebookAgent
 
 ```bash
 # 克隆项目
-git clone <repository-url>
+git clone https://github.com/bochendong/AgentUniverse.git
 cd AgentUniverse
 
 # 后端设置
