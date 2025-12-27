@@ -98,32 +98,18 @@ class IntentExtractionAgent(Agent):
         model_name = get_model_name()  # 确保获取正确的模型名称
         model_settings = get_model_settings(model_name=model_name)  # 显式传递模型名称
         
-        # Debug: Print model being used
-        # 检查 ModelSettings 的所有属性
-        print(f"[IntentExtractionAgent] ModelSettings 属性: {dir(model_settings)}")
-        model_attr = getattr(model_settings, 'model', None) or getattr(model_settings, '_model', None) or 'N/A'
-        print(f"[IntentExtractionAgent] 使用模型: {model_attr} (期望: {model_name})")
-        verbosity_attr = getattr(model_settings, 'verbosity', None) or getattr(model_settings, '_verbosity', None) or 'N/A'
-        print(f"[IntentExtractionAgent] verbosity: {verbosity_attr}")
-        
         # ModelSettings 不接受 model 参数，模型名称通过 Agent 的 model 参数传递
         # 这里只需要确保 verbosity 正确即可
-        
-        # 同时显式传递 model 参数，确保 Agent SDK 使用正确的模型
-        from backend.config.model_config import get_model_name
-        explicit_model = get_model_name()
         
         super().__init__(
             name="IntentExtractionAgent",
             instructions=instructions,
             output_type=AgentOutputSchema(NotebookCreationIntent, strict_json_schema=False),
-            model=explicit_model,  # 显式传递 model 参数
+            model=model_name,  # 显式传递 model 参数
             model_settings=model_settings
         )
         
         # 验证 Agent 实际使用的模型
-        if hasattr(self, 'model'):
-            print(f"[IntentExtractionAgent] Agent.model 属性: {self.model}")
-        if hasattr(self, 'model_settings') and self.model_settings:
-            actual_model = getattr(self.model_settings, 'model', None) or getattr(self.model_settings, '_model', None)
-            print(f"[IntentExtractionAgent] Agent.model_settings.model: {actual_model}")
+        actual_model = getattr(self, 'model', None) or model_name
+        verbosity_attr = getattr(model_settings, 'verbosity', None) if model_settings else None
+        print(f"[IntentExtractionAgent] 使用模型: {actual_model} (期望: {model_name}), verbosity: {verbosity_attr}")

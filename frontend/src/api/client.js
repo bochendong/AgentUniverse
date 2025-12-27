@@ -34,9 +34,21 @@ export const deleteAgent = (agentId) => api.delete(`/api/agents/${agentId}`)
 export const resetDatabase = () => api.post('/api/agents/reset-database')
 export const splitNotebook = (notebookId) => api.post(`/api/notebooks/${notebookId}/split`)
 
-// TopLevelAgent Chat
+// TopLevelAgent Chat - 普通聊天（只支持文本）
 export const chatWithTopLevelAgent = (message, sessionId = null) =>
-  api.post('/api/top-level-agent/chat', { message, session_id: sessionId })
+  api.post('/api/top-level-agent/chat', { 
+    message, 
+    session_id: sessionId
+  })
+
+// TopLevelAgent Source Chat - 带文件的聊天（支持文件上传和图片）
+export const sourceChatWithTopLevelAgent = (message, sessionId = null, filePath = null, images = null) =>
+  api.post('/api/top-level-agent/source-chat', { 
+    message, 
+    session_id: sessionId,
+    file_path: filePath || null,
+    images: images || null
+  })
 
 // TopLevelAgent Sessions
 export const createTopLevelAgentSession = (title = null) =>
@@ -118,6 +130,18 @@ export const getTool = (toolId) => {
 
 export const getAgentAsToolDetails = (toolId) => {
   return api.get(`/api/tools/${toolId}/agent-details`)
+}
+
+export const executeTool = (toolId, parameters) => {
+  return api.post(`/api/tools/${toolId}/execute`, { parameters })
+}
+
+export const syncTools = () => {
+  return api.post('/api/tools/sync')
+}
+
+export const cleanupOldTools = () => {
+  return api.post('/api/tools/cleanup')
 }
 
 // Tracing

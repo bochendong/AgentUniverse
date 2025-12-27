@@ -7,6 +7,16 @@ from backend.config.model_config import get_section_maker_model_settings, get_mo
 from .base import BaseSectionCreator
 from .utils import get_file_content
 
+# 导入公共 prompt 片段
+from backend.prompts.common_prompt_snippets import (
+    QUESTION_TYPE_REQUIREMENTS,
+    PROOF_QUALITY_REQUIREMENTS,
+    CODE_AND_MATH_FORMAT_REQUIREMENTS,
+    SECTION_OUTPUT_STRUCTURE,
+    CONCEPT_BLOCKS_DETAILED_REQUIREMENTS_FROM_SCRATCH,
+    EXERCISES_DETAILED_REQUIREMENTS_FROM_SCRATCH
+)
+
 
 class FromScratchSectionCreator(BaseSectionCreator):
     """从零生成章节内容的创建器
@@ -47,18 +57,6 @@ class FromScratchSectionCreator(BaseSectionCreator):
             f"  {i+1}. {title}: {desc[:60]}..." 
             for i, (title, desc) in enumerate(self.outline.outlines.items())
         ])
-        
-        # 代码和数学公式格式说明
-        code_math_format_instructions = """
-**代码和数学公式格式要求（重要）**：
-- **代码块**：所有代码必须使用 Markdown 代码块格式
-  - 行内代码：使用反引号包裹，如 `code`
-  - 代码块：使用三个反引号包裹，并指定语言
-- **数学公式**：所有数学公式必须使用 LaTeX 格式
-  - **行内公式**：使用单个美元符号包裹，格式为 `$公式内容$`
-  - **块级公式**：使用两个美元符号包裹，格式为 `$$公式内容$$`
-  - **重要规则**：所有数学符号、变量、集合等都必须在公式标记内
-"""
         
         # 根据是否有参考文件，生成不同的指导
         if has_reference:
@@ -115,18 +113,7 @@ class FromScratchSectionCreator(BaseSectionCreator):
      * **notes（笔记）**：补充说明、注意事项、常见误区等
      * **theorems（定理）**：如果概念有相关定理，包含定理和详细证明
    
-2. **第一章的特殊要求**：
-   - 如果这是第一章（位置: 第 1/{total_sections} 章），**必须包含所有基础概念的定义**
-   - 不能直接使用高级概念，必须先定义基础概念
-   - 例如：如果章节提到"策略 $\\pi$"、"价值函数 $V^{{\\pi}}$"，必须先定义：
-     * 什么是强化学习
-     * 什么是MDP（马尔可夫决策过程）
-     * 什么是策略（policy）
-     * 什么是回报（return）
-     * 什么是价值函数
-   - 每个基础概念都要有独立的 ConceptBlock，包含定义、例子、说明
-
-3. **内容完整性**：
+2. **内容完整性**：
    - 不能只生成证明题，必须包含：
      * 基础概念的定义（ConceptBlock）
      * 理解性例子（选择题、填空题、简答题）
@@ -134,76 +121,24 @@ class FromScratchSectionCreator(BaseSectionCreator):
      * 进阶内容（证明题、定理）
    - 确保内容从易到难，循序渐进
 
-4. **内容质量**：
+3. **内容质量**：
    - 定义必须准确、完整，不能省略关键要素
    - 例子必须具体、易懂，帮助理解概念
    - 说明必须清晰，解释为什么、怎么用、注意什么
 
-{code_math_format_instructions}
+{CODE_AND_MATH_FORMAT_REQUIREMENTS}
 
-**输出结构**
+{SECTION_OUTPUT_STRUCTURE}
 
-返回一个 Section 对象，包含：
+{CONCEPT_BLOCKS_DETAILED_REQUIREMENTS_FROM_SCRATCH}
 
-1. **introduction**（介绍）：为什么学习、有什么用、解决什么问题、在知识体系中的位置
-   - **重要**：introduction字段只能包含介绍性文本，**不能包含例子、选择题、练习题、题目等任何需要答题的内容**
+{EXERCISES_DETAILED_REQUIREMENTS_FROM_SCRATCH}
 
-2. **concept_blocks**（概念块列表）：
-   - **⚠️ 这是最重要的部分，必须严格遵守**：
-     * 你必须为章节描述中提到的每个核心概念创建一个 ConceptBlock
-     * **每个概念块必须包含一个 definition（定义）字段，这是必需字段，不能为空**
-     * **定义必须完整、准确，不能省略关键要素**
-     * **每个定义后面必须关联 examples（例子列表），至少1-2个例子帮助理解**
-     * **每个定义后面应该关联 notes（笔记列表），说明注意事项、常见误区等**
-   
-   - **第一章的特殊要求**：
-     * 如果这是第一章，必须包含所有基础概念的定义
-     * 不能直接使用高级概念（如 $V^{{\\pi}}$、$Q^{{\\pi}}$、$\\pi$），必须先定义基础概念
-     * 每个基础概念都要有独立的 ConceptBlock
-   
-   - 定义后面关联的 examples（例子列表，每个 Example 必须是以下5种题目类型之一）
-   - 定义后面关联的 notes（笔记列表）
-   - 定义后面关联的 theorems（定理列表，每个 Theorem 包含 theorem、proof、examples）
+{QUESTION_TYPE_REQUIREMENTS}
 
-3. **standalone_examples**（独立例子，可选）
-
-4. **standalone_notes**（独立笔记，可选）
-
-5. **summary**（总结）：如何学好、常见误区、通用解题思路、证明格式、学习建议、关键要点
-
-6. **exercises**（练习题）：每个练习必须是以下5种题目类型之一
-   - **⚠️ 重要：练习题必须多样化，不能只有一种类型**
-   - **必须包含**：
-     * 选择题：至少1-2题，测试基础概念理解
-     * 填空题：至少1-2题，测试定义记忆
-     * 简答题：至少1-2题，测试概念理解
-     * 证明题：根据章节内容决定，但不能只有证明题
-     * 代码题：如果适用（如编程相关章节）
-   - **第一章的特殊要求**：
-     * 必须特别注重基础概念的理解题
-     * 不能直接跳到高级证明题
-     * 必须先有基础理解题，再有进阶证明题
-
-**题目类型要求（examples 和 exercises 都必须使用以下5种类型之一）**
-
-1. **选择题 (multiple_choice)**：question_type="multiple_choice", question, options (4个), correct_answer, explanation
-2. **填空题 (fill_blank)**：question_type="fill_blank", question (使用[空1]、[空2]等占位符), blanks (字典), explanation
-3. **证明题 (proof)**：question_type="proof", question, answer, proof (详细步骤), explanation
-4. **简答题 (short_answer)**：question_type="short_answer", question, answer, explanation
-5. **代码题 (code)**：question_type="code", question, code_answer, explanation
-
-**证明质量要求（重要，必须严格遵守）**：
-- 所有proof必须包含详细的中间步骤，不能跳过关键推理
-- 必须明确引用使用的公式、定理、定义（要写出具体的公式内容）
-- 对于涉及计算的证明，必须展示详细的计算过程
-- 每一步推理都要有清晰说明
-- 使用标记使步骤清晰（如"步骤1"、"步骤2"）
-- 证明必须完整详细，达到教学标准，便于初学者理解
-- **所有数学符号、变量、集合等都必须用LaTeX公式标记包裹**
+{PROOF_QUALITY_REQUIREMENTS}
 
 **重要要求**：
-- 每个例子和练习都必须明确指定 question_type，不能为null
-- 保持题目的多样性和合理性，根据内容特点选择合适的题目类型
 - 按照逻辑顺序组织内容：基础概念 → 进阶概念 → 应用和练习
 """
         
@@ -227,15 +162,8 @@ class FromScratchSectionCreator(BaseSectionCreator):
         
         section_data = response.final_output
         
-        # 优化内容（使用 RefinementOrchestrator）
-        print(f"[优化] 开始优化章节 '{section_title}' 的内容...")
-        from backend.tools.agent_as_tools.refinement_agents import RefinementOrchestrator
-        orchestrator = RefinementOrchestrator(
-            section=section_data,
-            section_context=f"{section_description}\n\n章节介绍: {section_data.introduction[:500]}"
-        )
-        section_data = await orchestrator.refine_all()
-        print(f"[优化] 章节 '{section_title}' 内容优化完成")
+        # 注意：根据重构方案，这里不再调用 RefinementOrchestrator
+        # 优化将在 NotebookAgent 创建后统一进行（通过 ContentEvaluationAgent 评估后修复）
         
         return section_data
 

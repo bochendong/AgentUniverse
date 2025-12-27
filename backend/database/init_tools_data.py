@@ -29,42 +29,31 @@ def init_default_tools():
             'output_description': '返回目标agent处理消息后的完整响应文本。如果agent执行成功，返回agent的执行结果；如果加载agent失败，返回"Error: Failed to load agent with ID {id} from database"；如果执行过程中出现异常，返回"Error sending message: {error_message}"',
         },
         {
-            'id': 'add_notebook_by_file',
-            'name': 'add_notebook_by_file',
-            'description': '根据文件路径，添加一个新的notebook agent（向后兼容版本）',
-            'task': '从文件创建notebook agent并添加到MasterAgent的子agents列表中。此工具会自动检测用户意图并选择合适的创建策略。',
-            'agent_type': 'MasterAgent',
-            'input_params': {
-                'file_path': {'type': 'str', 'description': '文件路径（支持 .docx, .md, .txt）', 'required': True},
-            },
-            'output_type': 'str',
-            'output_description': '返回操作结果字符串。成功时返回包含成功信息的消息（如"成功创建notebook agent..."）；失败时返回错误信息（如"创建notebook失败: {error_message}"或"执行失败: {error_message}"）。该工具会自动检测文件内容，选择合适的创建策略（Full Content、Enhancement、Knowledge Base、Outline First）',
-        },
-        {
             'id': 'create_notebook',
             'name': 'create_notebook',
-            'description': '根据用户请求创建notebook agent（支持多种场景）',
-            'task': '灵活的工具，支持从文件或主题创建notebook。会自动分析用户意图，选择合适的创建策略。如果是outline_first场景，会先生成大纲供用户确认。',
+            'description': '根据确认的大纲创建notebook agent',
+            'task': 'MasterAgent用于接收确认的大纲并创建完整的notebook。使用NotebookCreationRouter内部判断意图并选择策略，创建所有章节内容，然后创建NotebookAgent实例。',
             'agent_type': 'MasterAgent',
             'input_params': {
-                'user_request': {'type': 'str', 'description': '用户的请求内容', 'required': True},
-                'file_path': {'type': 'str', 'description': '文件路径（可选，支持 .docx, .md, .txt）', 'required': False},
-            },
-            'output_type': 'str',
-            'output_description': '返回包含大纲信息的markdown格式字符串。格式为："📋 **大纲已生成，请确认：**\n\n{大纲的markdown展示}\n\n**大纲数据（JSON格式，供系统使用）：**\n```json\n{JSON格式的大纲数据}\n```\n\n请确认此大纲是否符合您的需求..."。JSON数据包含notebook_title（字符串）、notebook_description（字符串）和outlines（字典，键值都是字符串）。该输出用于前端展示和用户确认，确认后系统会继续生成完整笔记本内容',
-        },
-        {
-            'id': 'handle_file_upload',
-            'name': 'handle_file_upload',
-            'description': '处理文件上传：验证文件并发送消息给MasterAgent创建notebook',
-            'task': 'TopLevelAgent用于处理用户上传的文件。验证文件存在性，然后向MasterAgent发送消息，要求其调用create_notebook工具来生成大纲供用户确认。',
-            'agent_type': 'TopLevelAgent',
-            'input_params': {
-                'file_path': {'type': 'str', 'description': '上传的文件路径（可能是原始路径或已保存的路径）', 'required': True},
+                'outline': {'type': 'str', 'description': '确认的大纲对象（JSON字符串格式，包含notebook_title、notebook_description和outlines字典）', 'required': True},
+                'file_path': {'type': 'str', 'description': '文件路径（可选，有文件时提供）', 'required': False},
                 'user_request': {'type': 'str', 'description': '用户的原始请求内容', 'required': True},
             },
             'output_type': 'str',
-            'output_description': '返回MasterAgent执行create_notebook工具后的完整输出字符串。通常是包含大纲信息的markdown格式文本（格式与create_notebook的输出相同），用于前端展示给用户确认。如果文件不存在或处理失败，返回错误信息（如"错误: 文件不存在: {file_path}"或"处理文件上传失败: {error_message}"）',
+            'output_description': '返回创建结果字符串。成功时返回notebook信息（ID、标题等），失败时返回错误信息。',
+        },
+        {
+            'id': 'generate_outline',
+            'name': 'generate_outline',
+            'description': '生成学习大纲供用户确认（统一工具）',
+            'task': 'TopLevelAgent用于处理用户创建笔记本的请求。根据用户请求的主题，生成学习大纲供用户确认。如果提供了file_path，则从文件生成大纲；否则从主题生成大纲。',
+            'agent_type': 'TopLevelAgent',
+            'input_params': {
+                'user_request': {'type': 'str', 'description': '用户的请求内容', 'required': True},
+                'file_path': {'type': 'str', 'description': '文件路径（可选，如果有文件则提供）', 'required': False},
+            },
+            'output_type': 'str',
+            'output_description': '返回包含大纲信息的markdown格式字符串。格式包含大纲的markdown展示和JSON格式的大纲数据。该输出用于前端展示给用户确认。',
         },
         # DEPRECATED: modify_notes tool has been removed - use add_content_to_section or modify_by_id instead
         # {
@@ -77,7 +66,7 @@ def init_default_tools():
         #         'new_notes': {'type': 'str', 'description': '新的笔记内容', 'required': True},
         #     },
         #     'output_type': 'str',
-        #     'output_description': '返回操作结果字符串。正常情况下返回"笔记已更新"。如果检测到笔记需要拆分（章节数>10或字数>3000），返回"笔记已更新。⚠️ 建议拆分：章节数={sections_count}，字数={word_count}（超过限制：章节>10 或 字数>3000）"，提示用户考虑拆分笔记。该工具会自动更新agent的instructions以反映新的笔记内容',
+        #     'output_description': '返回操作结果字符串。正常情况下返回"笔记已更新"。如果检测到笔记需要拆分（章节数>10或字数>10000），返回"笔记已更新。⚠️ 建议拆分：章节数={sections_count}，字数={word_count}（超过限制：章节>10 或 字数>10000）"，提示用户考虑拆分笔记。该工具会自动更新agent的instructions以反映新的笔记内容',
         # },
     ]
     

@@ -45,3 +45,4 @@ class DefinitionModifyAgent(BaseModifyAgent):
     def get_modification_target(self) -> str:
         return "定义"
 
+

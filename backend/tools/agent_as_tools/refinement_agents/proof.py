@@ -6,6 +6,12 @@ from backend.models import Section, ConceptBlock
 from backend.config.model_config import get_model_settings, get_model_name
 from .base import BaseRefinementAgent
 
+# 导入公共 prompt 片段
+from backend.prompts.common_prompt_snippets import (
+    PROOF_QUALITY_REQUIREMENTS,
+    LATEX_FORMAT_REQUIREMENTS
+)
+
 
 class ProofRefinementAgent(BaseRefinementAgent):
     """
@@ -83,13 +89,10 @@ class ProofRefinementAgent(BaseRefinementAgent):
 - 保持原证明的核心逻辑不变
 - 补充的内容必须准确、合理
 - 公式引用必须具体明确
-- **所有数学公式必须使用LaTeX格式，严格遵循以下规则**：
-  * 行内公式：使用单个美元符号 `$...$` 包裹，公式内容不能包含换行符
-  * 块级公式：使用两个美元符号 `$$...$$` 包裹，公式前后必须有空行
-  * 确保所有数学符号、变量、集合等都用公式标记包裹（例如：有理数集合、自然数集合等都要用公式标记而不是直接写字母）
-  * 不要在公式标记内外混用文本，错误做法是直接写"有理数集 Q"，正确做法是"有理数集"后面跟公式标记包裹的数学符号
-  * 公式中不要有多余的换行，如果需要多行公式，使用适当的LaTeX环境（如 `align`、`matrix` 等）
+- {LATEX_FORMAT_REQUIREMENTS}
 - 确保证明达到教学标准，便于初学者理解
+
+{PROOF_QUALITY_REQUIREMENTS}
 
 **输出格式**
 返回优化后的Section对象，包含所有优化后的proof。
@@ -190,4 +193,5 @@ class ProofRefinementAgent(BaseRefinementAgent):
 """)
         
         return "\n".join(result) if result else "无"
+
 

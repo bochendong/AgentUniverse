@@ -7,6 +7,14 @@ from backend.config.model_config import get_section_maker_model_settings, get_mo
 from .base import BaseSectionCreator
 from .utils import get_file_content
 
+# 导入公共 prompt 片段
+from backend.prompts.common_prompt_snippets import (
+    QUESTION_TYPE_REQUIREMENTS,
+    PROOF_QUALITY_REQUIREMENTS,
+    SECTION_OUTPUT_STRUCTURE,
+    CONCEPT_BLOCKS_BASIC_REQUIREMENTS
+)
+
 
 class WellFormedNoteSectionCreator(BaseSectionCreator):
     """处理完善笔记的创建器
@@ -105,47 +113,18 @@ class WellFormedNoteSectionCreator(BaseSectionCreator):
    - 如果例子缺少解答，补充完整解答步骤
    - 如果内容已经很完善，保持原样，只做格式优化
 
-**输出结构**
+{SECTION_OUTPUT_STRUCTURE}
 
-返回一个 Section 对象，包含：
+{CONCEPT_BLOCKS_BASIC_REQUIREMENTS}
 
-1. **introduction**（介绍）：为什么学习、有什么用、解决什么问题、在知识体系中的位置
-   - **重要**：introduction字段只能包含介绍性文本，**不能包含例子、选择题、练习题、题目等任何需要答题的内容**
+**提取场景的特殊要求**：
+- 如果原文档中只有定理没有明确定义，应该将定理关联到相关的定义，或者为该定理创建一个包含相关定义说明的concept_block
 
-2. **concept_blocks**（概念块列表）：
-   - **重要**：每个概念块必须包含一个 definition（定义）字段，这是必需字段，不能为空
-   - 如果原文档中只有定理没有明确定义，应该将定理关联到相关的定义，或者为该定理创建一个包含相关定义说明的concept_block
-   - 定义后面关联的 examples（例子列表，每个 Example 必须是以下5种题目类型之一）
-   - 定义后面关联的 notes（笔记列表）
-   - 定义后面关联的 theorems（定理列表，每个 Theorem 包含 theorem、proof、examples）
+{QUESTION_TYPE_REQUIREMENTS}
 
-3. **standalone_examples**（独立例子，可选）
-
-4. **standalone_notes**（独立笔记，可选）
-
-5. **summary**（总结）：如何学好、常见误区、通用解题思路、证明格式、学习建议、关键要点
-
-6. **exercises**（练习题）：每个练习必须是以下5种题目类型之一
-
-**题目类型要求（examples 和 exercises 都必须使用以下5种类型之一）**
-
-1. **选择题 (multiple_choice)**：question_type="multiple_choice", question, options (4个), correct_answer, explanation
-2. **填空题 (fill_blank)**：question_type="fill_blank", question (使用[空1]、[空2]等占位符), blanks (字典), explanation
-3. **证明题 (proof)**：question_type="proof", question, answer, proof (详细步骤), explanation
-4. **简答题 (short_answer)**：question_type="short_answer", question, answer, explanation
-5. **代码题 (code)**：question_type="code", question, code_answer, explanation
-
-**证明质量要求（重要，必须严格遵守）**：
-- 所有proof必须包含详细的中间步骤，不能跳过关键推理
-- 必须明确引用使用的公式、定理、定义（要写出具体的公式内容）
-- 对于涉及计算的证明，必须展示详细的计算过程
-- 每一步推理都要有清晰说明
-- 使用标记使步骤清晰（如"步骤1"、"步骤2"）
-- 如果原文档的证明过于简略，必须补充完整，使其达到教学标准
-- **所有数学符号、变量、集合等都必须用LaTeX公式标记包裹**
+{PROOF_QUALITY_REQUIREMENTS}
 
 **重要要求**：
-- 每个例子和练习都必须明确指定 question_type，不能为null
 - 保持原文档的核心内容和格式
 - 如果原文档中某个定义后面有多个例子，必须全部提取
 - 如果原文档中有定理和证明标记，且与章节相关，必须提取
@@ -172,15 +151,8 @@ class WellFormedNoteSectionCreator(BaseSectionCreator):
         
         section_data = response.final_output
         
-        # 优化内容（使用 RefinementOrchestrator）
-        print(f"[优化] 开始优化章节 '{section_title}' 的内容...")
-        from backend.tools.agent_as_tools.refinement_agents import RefinementOrchestrator
-        orchestrator = RefinementOrchestrator(
-            section=section_data,
-            section_context=f"{section_description}\n\n章节介绍: {section_data.introduction[:500]}"
-        )
-        section_data = await orchestrator.refine_all()
-        print(f"[优化] 章节 '{section_title}' 内容优化完成")
+        # 注意：根据重构方案，这里不再调用 RefinementOrchestrator
+        # 优化将在 NotebookAgent 创建后统一进行（通过 ContentEvaluationAgent 评估后修复）
         
         return section_data
 

@@ -1,6 +1,9 @@
 """Tools API routes."""
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+from typing import Dict, Any, Optional
+import json
 from backend.database.tools_db import get_all_tools, get_tool as get_tool_from_db
 from backend.tools.tool_registry import get_tool_registry
 from backend.tools.tool_discovery import init_tool_system
@@ -8,6 +11,18 @@ from backend.tools.utils import generate_tools_usage_for_agent
 from backend.tools.utils.tool_usage_generator import format_tool_usage
 
 router = APIRouter(prefix="/api/tools", tags=["tools"])
+
+
+class ExecuteToolRequest(BaseModel):
+    """Request model for executing a tool."""
+    parameters: Dict[str, Any] = {}
+
+
+class ExecuteToolResponse(BaseModel):
+    """Response model for tool execution."""
+    success: bool
+    result: Any = None
+    error: Optional[str] = None
 
 
 @router.post("/sync")
@@ -18,6 +33,50 @@ async def sync_tools():
         return {'message': 'Tools synced successfully'}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error syncing tools: {str(e)}")
+
+
+@router.post("/cleanup")
+async def cleanup_old_tools():
+    """Remove old tools from database that are no longer registered."""
+    try:
+        from backend.database.tools_db import get_all_tools, delete_tool
+        
+        # Initialize tool system to register all current tools
+        init_tool_system()
+        
+        # Get registry
+        registry = get_tool_registry()
+        registered_tool_ids = set(registry.list_tools())
+        
+        # Get all tools from database
+        db_tools = get_all_tools()
+        db_tool_ids = {tool['id'] for tool in db_tools}
+        
+        # Find tools to delete (in database but not in registry)
+        tools_to_delete = db_tool_ids - registered_tool_ids
+        
+        deleted_tools = []
+        for tool_id in tools_to_delete:
+            tool = next((t for t in db_tools if t['id'] == tool_id), None)
+            if delete_tool(tool_id):
+                deleted_tools.append({
+                    'id': tool_id,
+                    'name': tool.get('name', 'N/A') if tool else 'N/A'
+                })
+        
+        # Re-sync tools to database
+        registry.sync_to_database()
+        
+        return {
+            'message': f'Cleaned up {len(deleted_tools)} old tools',
+            'deleted_tools': deleted_tools,
+            'registered_tools_count': len(registered_tool_ids),
+            'database_tools_count_after': len(get_all_tools())
+        }
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        raise HTTPException(status_code=500, detail=f"Error cleaning up tools: {str(e)}\n\nTraceback: {error_trace}")
 
 
 @router.get("")
@@ -261,3 +320,125 @@ async def get_agent_as_tool_details(tool_id: str):
         import traceback
         error_trace = traceback.format_exc()
         raise HTTPException(status_code=500, detail=f"Error getting agent details: {str(e)}\n\nTraceback: {error_trace}")
+
+
+@router.post("/{tool_id}/execute")
+async def execute_tool(tool_id: str, request: ExecuteToolRequest):
+    """Execute a tool with given parameters."""
+    try:
+        registry = get_tool_registry()
+        metadata = registry.get_tool_metadata(tool_id)
+        
+        if not metadata:
+            raise HTTPException(status_code=404, detail=f"Tool not found: {tool_id}")
+        
+        # Get tool from database to check tool_type
+        tool_db = get_tool_from_db(tool_id)
+        tool_type = tool_db.get('tool_type', 'function') if tool_db else 'function'
+        
+        # Create a dummy agent for function tools that require an agent
+        # For agent_as_tool, we don't need an agent instance
+        dummy_agent = None
+        if tool_type == 'function':
+            # Create a minimal dummy agent for function tools
+            from backend.agent.BaseAgent import BaseAgent
+            dummy_agent = BaseAgent(name="ToolExecutor", instructions="Tool executor agent")
+        
+        # Create tool instance
+        tool_instance = registry.create_tool(tool_id, dummy_agent, **request.parameters)
+        
+        if not tool_instance:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Failed to create tool instance. Check that all required parameters are provided."
+            )
+        
+        # Execute the tool
+        try:
+            if tool_type == 'function':
+                # For function tools, we need to call on_invoke_tool with a context
+                from agents import RunContext
+                from agents import Agent
+                
+                # Create a minimal context
+                context = RunContext()
+                if dummy_agent:
+                    context.agent = dummy_agent
+                
+                # Convert parameters to JSON string
+                params_json = json.dumps(request.parameters, ensure_ascii=False)
+                
+                # Call the tool
+                if hasattr(tool_instance, 'on_invoke_tool'):
+                    result = await tool_instance.on_invoke_tool(context, params_json)
+                else:
+                    # If it's a regular function, try calling it directly
+                    result = tool_instance(**request.parameters)
+                    if hasattr(result, '__await__'):
+                        result = await result
+                
+            elif tool_type == 'agent_as_tool':
+                # For agent_as_tool, the tool is already an agent instance wrapped as tool
+                # The parameters were used to initialize the agent instance
+                # Now we need to run the agent with a message
+                from agents import Runner
+                
+                # Get the agent instance from the tool
+                agent_instance = getattr(tool_instance, '_agent_instance', None)
+                if not agent_instance:
+                    # If tool_instance itself is the agent (not wrapped)
+                    agent_instance = tool_instance
+                
+                # For agent_as_tool, we need to determine what message to send
+                # Check metadata for typical input parameter names
+                message = None
+                if metadata and metadata.input_params:
+                    # Look for common message parameter names
+                    for param_name in ['input', 'message', 'user_request', 'request', 'query', 'prompt']:
+                        if param_name in request.parameters:
+                            message = request.parameters[param_name]
+                            break
+                
+                # If no message parameter found, try to construct from remaining parameters
+                if not message:
+                    # Get parameters that were used for initialization (from metadata)
+                    init_params = set(metadata.input_params.keys()) if metadata else set()
+                    # Find parameters that might be for the message
+                    remaining_params = {k: v for k, v in request.parameters.items() if k not in init_params}
+                    if remaining_params:
+                        # Use the first remaining parameter as message
+                        message = list(remaining_params.values())[0]
+                    else:
+                        # Fallback: use all parameters as JSON
+                        message = json.dumps(request.parameters, ensure_ascii=False)
+                
+                # Ensure message is a string
+                if not isinstance(message, str):
+                    message = str(message)
+                
+                # Run the agent
+                result = await Runner.run(agent_instance, message)
+                
+                # Extract final output if available
+                if hasattr(result, 'final_output'):
+                    result = result.final_output
+                else:
+                    result = str(result)
+            else:
+                raise HTTPException(status_code=400, detail=f"Unknown tool type: {tool_type}")
+            
+            return ExecuteToolResponse(success=True, result=result)
+            
+        except Exception as exec_error:
+            import traceback
+            error_trace = traceback.format_exc()
+            error_msg = f"Error executing tool: {str(exec_error)}\n\nTraceback: {error_trace}"
+            print(f"[execute_tool] {error_msg}")
+            return ExecuteToolResponse(success=False, error=error_msg)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        raise HTTPException(status_code=500, detail=f"Error executing tool: {str(e)}\n\nTraceback: {error_trace}")

@@ -18,8 +18,8 @@ def get_default_instructions(agent_type: str, agent: Optional[Any] = None) -> st
     """
     # Default tool IDs for each agent type
     tool_ids_map = {
-        'top_level_agent': ['send_message', 'handle_file_upload', 'create_notebook_from_outline'],
-        'master': ['send_message', 'add_notebook_by_file', 'create_notebook', 'create_notebook_with_outline'],
+        'top_level_agent': ['send_message', 'generate_outline'],
+        'master': ['send_message', 'create_notebook'],
         'notebook': ['modify_by_id', 'get_content_by_id', 'add_content_to_section'],
     }
     

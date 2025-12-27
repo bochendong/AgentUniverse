@@ -14,9 +14,8 @@ function ToolCard({ tool }) {
   const [usageExpanded, setUsageExpanded] = useState(false)
 
   const handleViewDetails = () => {
-    if (isAgentAsTool) {
-      navigate(`/tools/${tool.id}`)
-    }
+    // All tools can now have detail pages
+    navigate(`/tools/${tool.id}`)
   }
   const getAgentTypeColor = (agentType) => {
     const colors = {
@@ -52,13 +51,13 @@ function ToolCard({ tool }) {
         border: isAgentAsTool ? '2px solid #34C759' : '1px solid rgba(0,0,0,0.08)',
         borderRadius: 2,
         transition: 'all 0.2s',
-        cursor: isAgentAsTool ? 'pointer' : 'default',
-        '&:hover': {
-          boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-          transform: 'translateY(-2px)',
-        },
-      }}
-      onClick={isAgentAsTool ? handleViewDetails : undefined}
+      cursor: 'pointer',
+      '&:hover': {
+        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+        transform: 'translateY(-2px)',
+      },
+    }}
+    onClick={handleViewDetails}
     >
       <CardContent sx={{ p: 3 }}>
         {/* Header */}
@@ -460,31 +459,29 @@ function ToolCard({ tool }) {
           </Box>
         )}
 
-        {/* Agent as Tool - View Details Button */}
-        {isAgentAsTool && (
-          <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid rgba(0,0,0,0.08)' }}>
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={<InfoIcon />}
-              onClick={(e) => {
-                e.stopPropagation()
-                handleViewDetails()
-              }}
-              sx={{
-                width: '100%',
-                borderColor: '#34C759',
-                color: '#34C759',
-                '&:hover': {
-                  borderColor: '#34C759',
-                  bgcolor: '#34C75915',
-                },
-              }}
-            >
-              查看 Agent 详情
-            </Button>
-          </Box>
-        )}
+        {/* View Details Button */}
+        <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid rgba(0,0,0,0.08)' }}>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<InfoIcon />}
+            onClick={(e) => {
+              e.stopPropagation()
+              handleViewDetails()
+            }}
+            sx={{
+              width: '100%',
+              borderColor: isAgentAsTool ? '#34C759' : '#007AFF',
+              color: isAgentAsTool ? '#34C759' : '#007AFF',
+              '&:hover': {
+                borderColor: isAgentAsTool ? '#34C759' : '#007AFF',
+                bgcolor: isAgentAsTool ? '#34C75915' : '#007AFF15',
+              },
+            }}
+          >
+            {isAgentAsTool ? '查看 Agent 详情' : '查看详情'}
+          </Button>
+        </Box>
       </CardContent>
     </Card>
   )

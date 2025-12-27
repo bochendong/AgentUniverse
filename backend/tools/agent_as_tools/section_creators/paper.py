@@ -32,12 +32,12 @@ class PaperSectionCreator(BaseSectionCreator):
         if not self.file_path:
             raise ValueError("PaperSectionCreator 需要文件路径")
         
-        # 读取文件内容（PDF 支持未来扩展）
+        # 读取文件内容（支持PDF、DOCX、MD等格式）
         try:
             file_content = get_file_content(self.file_path)
-        except NotImplementedError:
-            # PDF 文件支持尚未实现，使用占位符
-            file_content = f"[PDF 文件内容提取功能尚未实现，文件路径: {self.file_path}]"
+        except Exception as e:
+            # 如果文件读取失败，抛出异常
+            raise ValueError(f"无法读取文件内容: {self.file_path}, 错误: {str(e)}")
         
         # 获取所有章节信息
         all_sections = list(self.outline.outlines.keys())

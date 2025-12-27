@@ -247,13 +247,17 @@ class BaseAgent(Agent):
         
         session_id = get_current_session_id()
         
+        # Add tool logging hook
+        from backend.utils.tool_logging_hooks import ToolLoggingHook
+        tool_logging_hook = ToolLoggingHook()
+        
         if session_id:
             # Track this agent run if we have a session_id
             with track_agent_run(session_id, self, message):
-                result = await Runner.run(self, message)
+                result = await Runner.run(self, message, hooks=tool_logging_hook)
         else:
-            # No session_id, run without tracing
-            result = await Runner.run(self, message)
+            # No session_id, run without tracing but with tool logging
+            result = await Runner.run(self, message, hooks=tool_logging_hook)
         
         return result
     

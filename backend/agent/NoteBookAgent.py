@@ -242,7 +242,7 @@ class NoteBookAgent(BaseAgent):
         
         Conditions for split:
         - Number of sections > 10
-        - Word count > 3000
+        - Word count > 10000
         
         Returns:
             True if split is recommended, False otherwise
@@ -254,7 +254,7 @@ class NoteBookAgent(BaseAgent):
         word_count = self._get_word_count()
         
         # Check if split conditions are met
-        should_split = sections_count > 10 or word_count > 3000
+        should_split = sections_count > 10 or word_count > 10000
         
         if should_split:
             # TODO: Send notification to user to confirm split

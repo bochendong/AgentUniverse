@@ -74,6 +74,7 @@ backend/tests/test_split/output/
 # Logs
 *.log
 logs/
+log/
 
 # OS files
 .DS_Store

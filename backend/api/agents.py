@@ -182,8 +182,8 @@ async def get_agent(agent_id: str):
                     reasons = []
                     if sections_count > 10:
                         reasons.append(f"章节数({sections_count}) > 10")
-                    if word_count > 3000:
-                        reasons.append(f"字数({word_count}) > 3000")
+                    if word_count > 10000:
+                        reasons.append(f"字数({word_count}) > 10000")
                     split_reason = "; ".join(reasons)
             
             agent_data['should_split'] = should_split
@@ -596,10 +596,13 @@ async def chat_with_agent(agent_id: str, request: ChatRequest):
             print(f"[chat_with_agent] Agent has no instructions attribute!")
         print(f"{'='*80}\n")
         
-        # Run agent with tracing
+        # Run agent with tracing and tool logging hooks
         from backend.utils.tracing_collector import track_agent_run
+        from backend.utils.tool_logging_hooks import ToolLoggingHook
+        
+        tool_logging_hook = ToolLoggingHook()
         with track_agent_run(session_id, agent, request.message):
-            result = await Runner.run(agent, request.message, session=session)
+            result = await Runner.run(agent, request.message, session=session, hooks=tool_logging_hook)
         
         # Extract response
         if hasattr(result, 'final_output'):

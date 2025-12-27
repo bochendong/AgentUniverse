@@ -40,8 +40,8 @@ async def get_notebook(notebook_id: str):
                 reasons = []
                 if sections_count > 10:
                     reasons.append(f"章节数({sections_count}) > 10")
-                if word_count > 3000:
-                    reasons.append(f"字数({word_count}) > 3000")
+                if word_count > 10000:
+                    reasons.append(f"字数({word_count}) > 10000")
                 split_reason = "; ".join(reasons)
         
         return {
@@ -210,7 +210,7 @@ async def split_notebook(notebook_id: str):
         if not agent._check_split():
             return {
                 "success": False,
-                "message": "当前笔记本不需要拆分（章节数 <= 10 且字数 <= 3000）"
+                "message": "当前笔记本不需要拆分（章节数 <= 10 且字数 <= 10000）"
             }
         
         # Execute split

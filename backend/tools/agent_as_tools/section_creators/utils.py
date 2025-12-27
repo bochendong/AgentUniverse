@@ -56,8 +56,36 @@ def get_file_content(file_path: str) -> str:
             raise IOError(f"读取文件失败: {file_path}, 错误: {str(e)}")
     
     elif file_ext == '.pdf':
-        # PDF 文件（未来扩展）
-        raise NotImplementedError("PDF 文件支持尚未实现")
+        # PDF 文件 - 使用agents库处理
+        try:
+            from backend.tools.utils.pdf_processor import extract_pdf_content
+            import asyncio
+            
+            # 尝试获取当前事件循环
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # 如果事件循环正在运行，我们需要在另一个线程中运行
+                    # 但get_file_content是同步函数，所以这里使用asyncio.run
+                    # 注意：这可能会在某些情况下失败，但这是同步函数调用异步函数的常见模式
+                    import nest_asyncio
+                    try:
+                        nest_asyncio.apply()
+                        content = loop.run_until_complete(extract_pdf_content(file_path))
+                    except (ImportError, RuntimeError):
+                        # 如果没有nest_asyncio或仍然失败，使用新的事件循环
+                        content = asyncio.run(extract_pdf_content(file_path))
+                else:
+                    content = loop.run_until_complete(extract_pdf_content(file_path))
+            except RuntimeError:
+                # 如果没有事件循环，创建一个新的
+                content = asyncio.run(extract_pdf_content(file_path))
+            
+            return content
+        except ImportError as e:
+            raise ImportError(f"PDF处理功能需要agents库支持: {str(e)}")
+        except Exception as e:
+            raise IOError(f"读取PDF文件失败: {file_path}, 错误: {str(e)}")
     
     elif file_ext in ['.pptx', '.ppt']:
         # PPT 文件（未来扩展）

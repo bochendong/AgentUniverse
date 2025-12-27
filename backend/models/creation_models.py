@@ -45,3 +45,14 @@ class SplitPlan(BaseModel):
     master_agent_title: str  # 新 MasterAgent 的标题
     master_agent_description: str  # 新 MasterAgent 的描述
     notebooks: List[NotebookSplit]  # 拆分后的 Notebook 列表
+
+
+class NotebookCreationResult(BaseModel):
+    """笔记本创建结果"""
+    model_config = ConfigDict(strict=False)
+    
+    status: Literal["success", "error"]  # 创建状态
+    message: str  # 用户友好的消息文本
+    notebook_id: Optional[str] = None  # 笔记本 ID（成功时提供）
+    notebook_title: Optional[str] = None  # 笔记本标题（成功时提供）
+    error: Optional[str] = None  # 错误信息（失败时提供）

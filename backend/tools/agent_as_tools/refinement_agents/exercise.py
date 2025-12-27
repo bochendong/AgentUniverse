@@ -6,6 +6,16 @@ from backend.models import Section, Example, ConceptBlock
 from backend.config.model_config import get_model_settings, get_model_name
 from .base import BaseRefinementAgent
 
+# 导入公共 prompt 片段
+from backend.prompts.common_prompt_snippets import (
+    QUESTION_TYPE_IDENTIFICATION,
+    MULTIPLE_CHOICE_REQUIREMENTS,
+    FILL_BLANK_REQUIREMENTS,
+    PROOF_EXERCISE_REQUIREMENTS,
+    SHORT_ANSWER_REQUIREMENTS,
+    LATEX_FORMAT_REQUIREMENTS
+)
+
 
 class ExerciseRefinementAgent(BaseRefinementAgent):
     """
@@ -43,46 +53,21 @@ class ExerciseRefinementAgent(BaseRefinementAgent):
 
 对章节中的所有exercises和examples进行优化：
 
-1. **题目类型识别**：
-   - 如果question_type为null，根据question内容智能识别类型
-   - 选择题关键词："下列哪个"、"哪个是"、"选择"、"Which of the following"等
-   - 填空题关键词：包含"[空1]"、"[空2]"等占位符
-   - 证明题关键词："证明"、"证明题"、"prove"、"show that"等
-   - 默认：简答题（short_answer）
+{QUESTION_TYPE_IDENTIFICATION}
 
-2. **选择题优化**（question_type = "multiple_choice"）：
-   - **必须**包含4个选项（options字段）
-   - **必须**指定正确答案（correct_answer: "A", "B", "C", 或 "D"）
-   - **必须**提供解释（explanation）
-   - 选项要求：
-     * 4个选项必须合理，有干扰性
-     * 正确答案必须正确
-     * 干扰选项应该常见但错误
-     * 选项格式统一，使用LaTeX格式（如需要）
+{MULTIPLE_CHOICE_REQUIREMENTS}
 
-3. **填空题优化**（question_type = "fill_blank"）：
-   - **必须**包含blanks字典，键与question中的占位符完全匹配
-   - **必须**提供explanation解释为什么填这些内容
-   - 如果question中没有占位符，需要添加占位符（如[空1]、[空2]）
+{FILL_BLANK_REQUIREMENTS}
 
-4. **证明题优化**（question_type = "proof"）：
-   - **必须**包含proof字段（详细证明步骤）
-   - **必须**包含answer字段（简要结论）
-   - proof要求：
-     * 分步骤说明，使用标记（如"步骤1"、"步骤2"或"(1)"、"(2)"）
-     * 明确引用使用的公式、定理、定义
-     * 展示关键计算过程
-     * 每一步都有清晰说明
+{PROOF_EXERCISE_REQUIREMENTS}
 
-5. **简答题优化**（question_type = "short_answer"）：
-   - **必须**包含answer字段
-   - **必须**包含explanation字段（详细解释）
+{SHORT_ANSWER_REQUIREMENTS}
 
 **重要原则**
 - 保持原题目的核心内容不变
 - 补充的内容必须准确、合理
 - 选项和答案必须基于章节内容和上下文
-- 所有数学公式使用LaTeX格式
+- {LATEX_FORMAT_REQUIREMENTS}
 - 确保题目完整可用，不能有null字段（除了代码题的code_answer）
 
 **输出格式**
@@ -174,4 +159,5 @@ class ExerciseRefinementAgent(BaseRefinementAgent):
                     result.append(self._format_exercises(thm.examples))
         
         return "\n".join(result) if result else "无"
+
 

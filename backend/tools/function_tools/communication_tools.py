@@ -67,7 +67,7 @@ def create_send_message_tool(agent: 'BaseAgent'):
             except Exception:
                 pass
             
-            return f"Error: Failed to load agent with ID {id} from database. Please check:\n1. The agent ID is correct and complete\n2. The agent exists in the database\n3. For file upload/notebook creation, use 'create_notebook_from_outline' tool instead of 'send_message'"
+            return f"Error: Failed to load agent with ID {id} from database. Please check:\n1. The agent ID is correct and complete\n2. The agent exists in the database\n3. For notebook creation, use 'generate_outline' to generate outline, then use 'send_message' to send action='create_notebook' message to MasterAgent"
 
         # Ensure tools are restored (AgentManager should do this, but double-check)
         if not hasattr(target_agent, 'tools') or target_agent.tools is None:

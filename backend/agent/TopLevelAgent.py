@@ -58,16 +58,14 @@ class TopLevelAgent(BaseAgent):
         registry = get_tool_registry()
         
         send_message = registry.create_tool("send_message", self)
-        handle_file_upload = registry.create_tool("handle_file_upload", self)
         generate_outline = registry.create_tool("generate_outline", self)
-        create_notebook_from_outline = registry.create_tool("create_notebook_from_outline", self)
         
         # Set tools list
-        self.tools = [t for t in [send_message, handle_file_upload, generate_outline, create_notebook_from_outline] if t is not None]
+        self.tools = [t for t in [send_message, generate_outline] if t is not None]
         
         # Update instructions with actual agent list and tool usage
         agent_dict = self._load_sub_agents_dict()
-        tool_ids = ['send_message', 'handle_file_upload', 'generate_outline', 'create_notebook_from_outline']
+        tool_ids = ['send_message', 'generate_outline']
         instructions = load_prompt(
             "top_level_agent",
             variables={"agents_list": get_all_agent_info(agent_dict)},
@@ -78,7 +76,7 @@ class TopLevelAgent(BaseAgent):
     def _recreate_tools(self):
         """Recreate tools after loading from database (tools cannot be pickled)."""
         # Default tool IDs for TopLevelAgent
-        default_tool_ids = ['send_message', 'handle_file_upload', 'generate_outline', 'create_notebook_from_outline']
+        default_tool_ids = ['send_message', 'generate_outline']
         self._recreate_tools_from_db(default_tool_ids)
         
         # Ensure tool_ids are saved to database (important for API to return correct tools)

@@ -44,3 +44,4 @@ class SummaryModifyAgent(BaseModifyAgent):
     def get_modification_target(self) -> str:
         return "总结"
 
+

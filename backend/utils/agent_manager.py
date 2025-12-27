@@ -73,11 +73,54 @@ class AgentManager:
     def _update_model_settings(self, agent: BaseAgent) -> None:
         """
         更新 Agent 的模型设置（从数据库加载的 Agent 可能使用旧的模型设置）
+        同时确保 API key 从环境变量读取（而不是使用序列化时保存的旧 key）
         
         Args:
             agent: The agent instance
         """
         try:
+            # 首先，确保 API key 从环境变量读取
+            # 重新加载 .env 文件以确保使用最新的 API key
+            try:
+                from dotenv import load_dotenv
+                from pathlib import Path
+                project_root = Path(__file__).parent.parent.parent
+                env_path = project_root / ".env"
+                if env_path.exists():
+                    load_dotenv(env_path, override=True)
+            except Exception:
+                pass  # 如果无法加载 .env，继续使用系统环境变量
+            
+            # 从环境变量获取 API key
+            import os
+            api_key = os.getenv('OPENAI_API_KEY')
+            if api_key:
+                # 强制设置环境变量，确保 agents 库使用最新的 API key
+                os.environ['OPENAI_API_KEY'] = api_key
+                
+                try:
+                    # 尝试更新 Agent 内部的 client API key
+                    # agents 库可能将 client 存储在不同的位置
+                    if hasattr(agent, '_client'):
+                        if hasattr(agent._client, 'api_key'):
+                            agent._client.api_key = api_key
+                        elif hasattr(agent._client, '_client') and hasattr(agent._client._client, 'api_key'):
+                            agent._client._client.api_key = api_key
+                    
+                    # 也检查是否有 model_client 属性
+                    if hasattr(agent, '_model_client'):
+                        if hasattr(agent._model_client, 'api_key'):
+                            agent._model_client.api_key = api_key
+                        elif hasattr(agent._model_client, '_client') and hasattr(agent._model_client._client, 'api_key'):
+                            agent._model_client._client.api_key = api_key
+                except Exception as e:
+                    # 如果无法更新，记录警告但不中断流程
+                    # agents 库应该会在实际调用时从环境变量读取
+                    print(f"[AgentManager] 警告: 无法直接更新 Agent {agent.id[:8]}... 的 API key: {e}")
+                    print(f"[AgentManager] 提示: 确保环境变量 OPENAI_API_KEY 已正确设置")
+            else:
+                print(f"[AgentManager] 警告: OPENAI_API_KEY 环境变量未设置")
+            
             from backend.config.model_config import get_model_name
             model_name = get_model_name()
             

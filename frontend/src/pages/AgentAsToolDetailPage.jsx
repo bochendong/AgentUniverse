@@ -11,9 +11,23 @@ import {
   Breadcrumbs,
   Link,
   Grid,
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Divider,
+  Chip,
 } from '@mui/material'
-import { ArrowBack as ArrowBackIcon, SmartToy as AgentIcon, Build as BuildIcon } from '@mui/icons-material'
-import { getTool, getAgentAsToolDetails } from '../api/client'
+import { 
+  ArrowBack as ArrowBackIcon, 
+  SmartToy as AgentIcon, 
+  Build as BuildIcon,
+  PlayArrow as PlayIcon,
+  CheckCircle as CheckCircleIcon,
+  Error as ErrorIcon,
+} from '@mui/icons-material'
+import { getTool, getAgentAsToolDetails, executeTool } from '../api/client'
 import AgentFlowDiagram from '../components/AgentFlowDiagram'
 
 /**
@@ -26,6 +40,11 @@ function AgentAsToolDetailPage() {
   const [agentDetails, setAgentDetails] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  // Skills Workspace state
+  const [parameters, setParameters] = useState({})
+  const [executing, setExecuting] = useState(false)
+  const [result, setResult] = useState(null)
+  const [workspaceError, setWorkspaceError] = useState(null)
 
   useEffect(() => {
     loadToolAndDetails()
@@ -40,21 +59,26 @@ function AgentAsToolDetailPage() {
       const toolResponse = await getTool(toolId)
       const toolData = toolResponse.data
 
-      if (toolData.tool_type !== 'agent_as_tool') {
-        setError('This tool is not an agent_as_tool type')
-        setLoading(false)
-        return
-      }
-
       setTool(toolData)
 
-      // Load agent details
-      try {
-        const detailsResponse = await getAgentAsToolDetails(toolId)
-        setAgentDetails(detailsResponse.data)
-      } catch (detailsError) {
-        console.warn('Failed to load agent details:', detailsError)
-        // Continue without details
+      // Initialize parameters for workspace
+      if (toolData.input_params) {
+        const initialParams = {}
+        Object.keys(toolData.input_params).forEach(paramName => {
+          initialParams[paramName] = ''
+        })
+        setParameters(initialParams)
+      }
+
+      // Load agent details (only for agent_as_tool)
+      if (toolData.tool_type === 'agent_as_tool') {
+        try {
+          const detailsResponse = await getAgentAsToolDetails(toolId)
+          setAgentDetails(detailsResponse.data)
+        } catch (detailsError) {
+          console.warn('Failed to load agent details:', detailsError)
+          // Continue without details
+        }
       }
     } catch (err) {
       console.error('Failed to load tool:', err)
@@ -62,6 +86,178 @@ function AgentAsToolDetailPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleParameterChange = (paramName, value) => {
+    setParameters(prev => ({
+      ...prev,
+      [paramName]: value,
+    }))
+  }
+
+  const handleExecute = async () => {
+    if (!tool) return
+
+    try {
+      setExecuting(true)
+      setWorkspaceError(null)
+      setResult(null)
+
+      // Convert parameters - handle JSON strings and empty strings
+      const processedParams = {}
+      Object.entries(parameters).forEach(([key, value]) => {
+        if (value === '') {
+          // Skip empty optional parameters
+          if (tool.input_params[key] && !tool.input_params[key].required) {
+            return
+          }
+        }
+        
+        // Try to parse as JSON if it looks like JSON
+        if (typeof value === 'string' && (value.startsWith('{') || value.startsWith('['))) {
+          try {
+            processedParams[key] = JSON.parse(value)
+          } catch {
+            processedParams[key] = value
+          }
+        } else {
+          processedParams[key] = value
+        }
+      })
+
+      const response = await executeTool(tool.id, processedParams)
+      
+      if (response.data.success) {
+        setResult(response.data.result)
+      } else {
+        setWorkspaceError(response.data.error || 'Tool execution failed')
+      }
+    } catch (err) {
+      console.error('Failed to execute tool:', err)
+      setWorkspaceError(err.response?.data?.detail || err.message || 'Failed to execute tool')
+    } finally {
+      setExecuting(false)
+    }
+  }
+
+  const getParameterInputType = (paramType) => {
+    if (paramType === 'int' || paramType === 'integer') return 'number'
+    if (paramType === 'float' || paramType === 'number') return 'number'
+    if (paramType === 'bool' || paramType === 'boolean') return 'text' // We'll use text for boolean
+    if (paramType === 'dict' || paramType === 'Dict' || paramType === 'list' || paramType === 'List') return 'text' // JSON string
+    return 'text'
+  }
+
+  const generateExampleUsage = () => {
+    if (!tool || !tool.input_params) return null
+
+    // Generate example input
+    const exampleInput = {}
+    Object.entries(tool.input_params).forEach(([paramName, paramInfo]) => {
+      const paramType = paramInfo.type || 'str'
+      const isRequired = paramInfo.required !== false
+      
+      if (!isRequired) {
+        // Skip optional parameters in example
+        return
+      }
+
+      // Generate example value based on type
+      if (paramType === 'str' || paramType === 'string') {
+        if (paramName.includes('path') || paramName.includes('file')) {
+          exampleInput[paramName] = '/path/to/example.md'
+        } else if (paramName.includes('id')) {
+          exampleInput[paramName] = 'example-id-123'
+        } else if (paramName.includes('message') || paramName.includes('request') || paramName.includes('input')) {
+          exampleInput[paramName] = 'This is an example message or request'
+        } else {
+          exampleInput[paramName] = 'example_value'
+        }
+      } else if (paramType === 'int' || paramType === 'integer') {
+        exampleInput[paramName] = 42
+      } else if (paramType === 'float' || paramType === 'number') {
+        exampleInput[paramName] = 3.14
+      } else if (paramType === 'bool' || paramType === 'boolean') {
+        exampleInput[paramName] = true
+      } else if (paramType === 'dict' || paramType === 'Dict') {
+        exampleInput[paramName] = { key: 'value', nested: { data: 123 } }
+      } else if (paramType === 'list' || paramType === 'List') {
+        exampleInput[paramName] = ['item1', 'item2', 'item3']
+      } else {
+        // Custom type - use a placeholder
+        exampleInput[paramName] = `{${paramType}}`
+      }
+    })
+
+    // Generate example output based on output_type
+    let exampleOutput = null
+    if (tool.output_type) {
+      if (tool.output_type === 'str' || tool.output_type === 'string') {
+        exampleOutput = 'Example output string result'
+      } else if (tool.output_type === 'int' || tool.output_type === 'integer') {
+        exampleOutput = 100
+      } else if (tool.output_type === 'float' || tool.output_type === 'number') {
+        exampleOutput = 99.5
+      } else if (tool.output_type === 'bool' || tool.output_type === 'boolean') {
+        exampleOutput = true
+      } else if (tool.output_type === 'dict' || tool.output_type === 'Dict') {
+        exampleOutput = { result: 'success', data: { key: 'value' } }
+      } else if (tool.output_type === 'list' || tool.output_type === 'List') {
+        exampleOutput = ['result1', 'result2']
+      } else {
+        // Custom type
+        exampleOutput = { type: tool.output_type, data: 'example data' }
+      }
+    }
+
+    return { input: exampleInput, output: exampleOutput }
+  }
+
+  const renderParameterInput = (paramName, paramInfo) => {
+    const paramType = paramInfo.type || 'str'
+    const isRequired = paramInfo.required !== false
+    const value = parameters[paramName] || ''
+
+    if (paramType === 'bool' || paramType === 'boolean') {
+      return (
+        <FormControl fullWidth size="small" key={paramName} sx={{ mb: 2 }}>
+          <InputLabel>{paramName}</InputLabel>
+          <Select
+            value={value || ''}
+            onChange={(e) => handleParameterChange(paramName, e.target.value)}
+            label={paramName}
+          >
+            <MenuItem value="">未选择</MenuItem>
+            <MenuItem value="true">True</MenuItem>
+            <MenuItem value="false">False</MenuItem>
+          </Select>
+        </FormControl>
+      )
+    }
+
+    return (
+      <TextField
+        key={paramName}
+        fullWidth
+        size="small"
+        label={paramName}
+        type={getParameterInputType(paramType)}
+        value={value}
+        onChange={(e) => handleParameterChange(paramName, e.target.value)}
+        required={isRequired}
+        helperText={paramInfo.description || `${paramType}${isRequired ? ' (必需)' : ' (可选)'}`}
+        multiline={paramType === 'dict' || paramType === 'Dict' || paramType === 'list' || paramType === 'List'}
+        rows={paramType === 'dict' || paramType === 'Dict' || paramType === 'list' || paramType === 'List' ? 4 : 1}
+        placeholder={
+          paramType === 'dict' || paramType === 'Dict' 
+            ? '{"key": "value"}' 
+            : paramType === 'list' || paramType === 'List'
+            ? '["item1", "item2"]'
+            : ''
+        }
+        sx={{ mb: 2 }}
+      />
+    )
   }
 
   return (
@@ -116,7 +312,7 @@ function AgentAsToolDetailPage() {
             </Button>
             <Box
               sx={{
-                bgcolor: '#34C759',
+                bgcolor: tool?.tool_type === 'agent_as_tool' ? '#34C759' : '#007AFF',
                 borderRadius: 2,
                 p: 1.5,
                 display: 'flex',
@@ -124,7 +320,11 @@ function AgentAsToolDetailPage() {
                 justifyContent: 'center',
               }}
             >
-              <AgentIcon sx={{ color: 'white', fontSize: 32 }} />
+              {tool?.tool_type === 'agent_as_tool' ? (
+                <AgentIcon sx={{ color: 'white', fontSize: 32 }} />
+              ) : (
+                <BuildIcon sx={{ color: 'white', fontSize: 32 }} />
+              )}
             </Box>
             <Box sx={{ flex: 1 }}>
               <Typography
@@ -194,32 +394,133 @@ function AgentAsToolDetailPage() {
           </Box>
         ) : tool && (
           <>
-            {/* Flow Diagram */}
-            <Paper
-              sx={{
-                p: 4,
-                bgcolor: 'white',
-                borderRadius: 3,
-                boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
-                mb: 3,
-              }}
-            >
-              <Typography
-                variant="h5"
+            {/* Flow Diagram - Only for agent_as_tool */}
+            {tool.tool_type === 'agent_as_tool' && (
+              <Paper
                 sx={{
-                  fontWeight: 600,
-                  color: '#1D1D1F',
+                  p: 4,
+                  bgcolor: 'white',
+                  borderRadius: 3,
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
                   mb: 3,
                 }}
               >
-                工作流程图
-              </Typography>
-              <AgentFlowDiagram
-                agentName={tool.name}
-                agentClass={tool.agent_class_name}
-                description={tool.description}
-              />
-            </Paper>
+                <Typography
+                  variant="h5"
+                  sx={{
+                    fontWeight: 600,
+                    color: '#1D1D1F',
+                    mb: 3,
+                  }}
+                >
+                  工作流程图
+                </Typography>
+                <AgentFlowDiagram
+                  agentName={tool.name}
+                  agentClass={tool.agent_class_name}
+                  description={tool.description}
+                />
+              </Paper>
+            )}
+
+            {/* Example Usage Section */}
+            {tool.input_params && Object.keys(tool.input_params).length > 0 && (() => {
+              const example = generateExampleUsage()
+              return example && (
+                <Paper
+                  sx={{
+                    p: 4,
+                    bgcolor: 'white',
+                    borderRadius: 3,
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+                    mb: 3,
+                  }}
+                >
+                  <Typography
+                    variant="h5"
+                    sx={{
+                      fontWeight: 600,
+                      color: '#1D1D1F',
+                      mb: 3,
+                    }}
+                  >
+                    示例使用
+                  </Typography>
+
+                  {/* Example Input */}
+                  <Box sx={{ mb: 3 }}>
+                    <Typography
+                      variant="h6"
+                      sx={{
+                        fontWeight: 600,
+                        color: '#1D1D1F',
+                        mb: 2,
+                      }}
+                    >
+                      输入示例
+                    </Typography>
+                    <Box
+                      sx={{
+                        p: 2.5,
+                        bgcolor: '#F5F5F7',
+                        borderRadius: 2,
+                        border: '1px solid rgba(0,0,0,0.06)',
+                      }}
+                    >
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          fontFamily: 'monospace',
+                          color: '#1D1D1F',
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word',
+                        }}
+                      >
+                        {JSON.stringify(example.input, null, 2)}
+                      </Typography>
+                    </Box>
+                  </Box>
+
+                  {/* Example Output */}
+                  {example.output !== null && (
+                    <Box>
+                      <Typography
+                        variant="h6"
+                        sx={{
+                          fontWeight: 600,
+                          color: '#1D1D1F',
+                          mb: 2,
+                        }}
+                      >
+                        输出示例
+                      </Typography>
+                      <Box
+                        sx={{
+                          p: 2.5,
+                          bgcolor: '#F5F5F7',
+                          borderRadius: 2,
+                          border: '1px solid rgba(0,0,0,0.06)',
+                        }}
+                      >
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            fontFamily: 'monospace',
+                            color: '#1D1D1F',
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word',
+                          }}
+                        >
+                          {typeof example.output === 'object' 
+                            ? JSON.stringify(example.output, null, 2)
+                            : String(example.output)}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  )}
+                </Paper>
+              )
+            })()}
 
             {/* Input/Output Section */}
             <Paper
@@ -447,8 +748,8 @@ function AgentAsToolDetailPage() {
               )}
             </Paper>
 
-            {/* Sub-agents Section */}
-            {agentDetails?.sub_agents && agentDetails.sub_agents.length > 0 && (
+            {/* Sub-agents Section - Only for agent_as_tool */}
+            {tool.tool_type === 'agent_as_tool' && agentDetails?.sub_agents && agentDetails.sub_agents.length > 0 && (
               <Paper
                 sx={{
                   p: 4,
@@ -513,8 +814,8 @@ function AgentAsToolDetailPage() {
               </Paper>
             )}
 
-            {/* Skills Section */}
-            {agentDetails?.tools && agentDetails.tools.length > 0 && (
+            {/* Skills Section - Only for agent_as_tool */}
+            {tool.tool_type === 'agent_as_tool' && agentDetails?.tools && agentDetails.tools.length > 0 && (
               <Paper
                 sx={{
                   p: 4,
@@ -579,14 +880,15 @@ function AgentAsToolDetailPage() {
               </Paper>
             )}
 
-            {/* Instructions Section */}
-            {agentDetails?.instructions && (
+            {/* Instructions Section - Only for agent_as_tool */}
+            {tool.tool_type === 'agent_as_tool' && agentDetails?.instructions && (
               <Paper
                 sx={{
                   p: 4,
                   bgcolor: 'white',
                   borderRadius: 3,
                   boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+                  mb: 3,
                 }}
               >
                 <Typography
@@ -622,6 +924,153 @@ function AgentAsToolDetailPage() {
                 </Box>
               </Paper>
             )}
+
+            {/* Skills Workspace Section */}
+            <Paper
+              sx={{
+                p: 4,
+                bgcolor: 'white',
+                borderRadius: 3,
+                boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+                <Box
+                  sx={{
+                    bgcolor: '#007AFF15',
+                    borderRadius: 2,
+                    p: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <BuildIcon sx={{ color: '#007AFF', fontSize: 24 }} />
+                </Box>
+                <Typography
+                  variant="h5"
+                  sx={{
+                    fontWeight: 600,
+                    color: '#1D1D1F',
+                  }}
+                >
+                  Skills Workspace
+                </Typography>
+              </Box>
+
+              {workspaceError && (
+                <Alert
+                  severity="error"
+                  sx={{ mb: 3 }}
+                  onClose={() => setWorkspaceError(null)}
+                  icon={<ErrorIcon />}
+                >
+                  {workspaceError}
+                </Alert>
+              )}
+
+              {tool.input_params && Object.keys(tool.input_params).length > 0 ? (
+                <>
+                  <Box sx={{ mb: 3 }}>
+                    <Typography
+                      variant="subtitle2"
+                      sx={{
+                        fontWeight: 600,
+                        color: '#1D1D1F',
+                        mb: 2,
+                      }}
+                    >
+                      输入参数
+                    </Typography>
+                    {Object.entries(tool.input_params).map(([paramName, paramInfo]) =>
+                      renderParameterInput(paramName, paramInfo)
+                    )}
+                  </Box>
+
+                  <Button
+                    fullWidth
+                    variant="contained"
+                    startIcon={executing ? <CircularProgress size={20} color="inherit" /> : <PlayIcon />}
+                    onClick={handleExecute}
+                    disabled={executing}
+                    sx={{
+                      bgcolor: '#007AFF',
+                      color: 'white',
+                      mb: 3,
+                      '&:hover': {
+                        bgcolor: '#0051D5',
+                      },
+                      '&:disabled': {
+                        bgcolor: 'rgba(0,0,0,0.1)',
+                      },
+                    }}
+                  >
+                    {executing ? '执行中...' : '执行'}
+                  </Button>
+                </>
+              ) : (
+                <Box sx={{ mb: 3 }}>
+                  <Typography variant="body2" sx={{ color: '#86868B' }}>
+                    此 skill 不需要输入参数
+                  </Typography>
+                </Box>
+              )}
+
+              {/* Result */}
+              {result !== null && (
+                <>
+                  <Divider sx={{ my: 3 }} />
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                    <CheckCircleIcon sx={{ color: '#34C759', fontSize: 24 }} />
+                    <Typography
+                      variant="h6"
+                      sx={{
+                        fontWeight: 600,
+                        color: '#1D1D1F',
+                      }}
+                    >
+                      输出结果
+                    </Typography>
+                  </Box>
+                  <Box
+                    sx={{
+                      p: 3,
+                      bgcolor: '#F5F5F7',
+                      borderRadius: 2,
+                      border: '1px solid rgba(0,0,0,0.06)',
+                      maxHeight: 500,
+                      overflow: 'auto',
+                    }}
+                  >
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontFamily: 'monospace',
+                        color: '#1D1D1F',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                      }}
+                    >
+                      {typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result)}
+                    </Typography>
+                  </Box>
+                </>
+              )}
+
+              {result === null && !executing && (
+                <Box
+                  sx={{
+                    textAlign: 'center',
+                    py: 4,
+                    color: '#86868B',
+                  }}
+                >
+                  <Typography variant="body2">
+                    执行 skill 后，结果将显示在这里
+                  </Typography>
+                </Box>
+              )}
+            </Paper>
           </>
         )}
       </Container>

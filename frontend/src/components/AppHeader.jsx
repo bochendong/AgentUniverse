@@ -64,15 +64,21 @@ function AppHeader() {
   }
 
   const isActive = (path) => location.pathname === path
+  const isHomePage = location.pathname === '/'
 
   return (
     <AppBar
       position="fixed"
       sx={{
-        bgcolor: isDark ? '#202123' : '#FFFFFF',
-        borderBottom: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.06)',
-        boxShadow: 'none',
+        bgcolor: isHomePage 
+          ? 'transparent' 
+          : (isDark ? '#202123' : '#FFFFFF'),
+        borderBottom: isHomePage
+          ? 'none'
+          : (isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.06)'),
+        boxShadow: isHomePage ? 'none' : 'none',
         zIndex: (theme) => theme.zIndex.drawer + 1,
+        backdropFilter: isHomePage ? 'blur(10px)' : 'none',
       }}
     >
       <Toolbar
@@ -90,7 +96,9 @@ function AppHeader() {
             variant="h6"
             sx={{
               fontWeight: 700,
-              color: isDark ? '#ececf1' : '#1D1D1F',
+              color: isHomePage 
+                ? (isDark ? '#FFFFFF' : '#1D1D1F') 
+                : (isDark ? '#ececf1' : '#1D1D1F'),
               mr: 2,
               cursor: 'pointer',
             }}
@@ -101,14 +109,18 @@ function AppHeader() {
           
           <Button
             startIcon={<ChatIcon />}
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/chat')}
             sx={{
-              color: isDark ? '#ececf1' : '#1D1D1F',
+              color: isHomePage 
+                ? (isDark ? '#FFFFFF' : '#1D1D1F') 
+                : (isDark ? '#ececf1' : '#1D1D1F'),
               textTransform: 'none',
               fontWeight: 500,
-              bgcolor: isActive('/') ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)') : 'transparent',
+              bgcolor: isActive('/chat') ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)') : 'transparent',
               '&:hover': {
-                bgcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                bgcolor: isHomePage 
+                  ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)')
+                  : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'),
               },
             }}
           >
@@ -119,14 +131,18 @@ function AppHeader() {
             startIcon={<AgentsIcon />}
             onClick={() => navigate('/agents')}
             sx={{
-              color: isDark ? '#ececf1' : '#1D1D1F',
+              color: isHomePage 
+                ? (isDark ? '#FFFFFF' : '#1D1D1F') 
+                : (isDark ? '#ececf1' : '#1D1D1F'),
               textTransform: 'none',
               fontWeight: 500,
               bgcolor: isActive('/agents') || location.pathname.startsWith('/agents/') 
                 ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)') 
                 : 'transparent',
               '&:hover': {
-                bgcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                bgcolor: isHomePage 
+                  ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)')
+                  : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'),
               },
             }}
           >
@@ -137,19 +153,24 @@ function AppHeader() {
             startIcon={<ToolsIcon />}
             onClick={() => navigate('/tools')}
             sx={{
-              color: isDark ? '#ececf1' : '#1D1D1F',
+              color: isHomePage 
+                ? (isDark ? '#FFFFFF' : '#1D1D1F') 
+                : (isDark ? '#ececf1' : '#1D1D1F'),
               textTransform: 'none',
               fontWeight: 500,
               bgcolor: isActive('/tools') 
                 ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)') 
                 : 'transparent',
               '&:hover': {
-                bgcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                bgcolor: isHomePage 
+                  ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)')
+                  : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'),
               },
             }}
           >
             Skills
           </Button>
+          
         </Box>
 
         {/* Right side - Settings and Login/User Avatar */}
@@ -157,9 +178,13 @@ function AppHeader() {
           <IconButton
             onClick={() => navigate('/settings')}
             sx={{
-              color: isDark ? '#ececf1' : '#1D1D1F',
+              color: isHomePage 
+                ? (isDark ? '#FFFFFF' : '#1D1D1F') 
+                : (isDark ? '#ececf1' : '#1D1D1F'),
               '&:hover': {
-                bgcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                bgcolor: isHomePage 
+                  ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)')
+                  : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'),
               },
             }}
           >
@@ -187,7 +212,9 @@ function AppHeader() {
                 <Typography
                   variant="body2"
                   sx={{
-                    color: isDark ? '#ececf1' : '#1D1D1F',
+                    color: isHomePage 
+                      ? (isDark ? '#FFFFFF' : '#1D1D1F') 
+                      : (isDark ? '#ececf1' : '#1D1D1F'),
                     fontWeight: 500,
                   }}
                 >
@@ -256,13 +283,21 @@ function AppHeader() {
               onClick={handleLogin}
               variant="outlined"
               sx={{
-                color: isDark ? '#ececf1' : '#007AFF',
-                borderColor: isDark ? 'rgba(255,255,255,0.2)' : '#007AFF',
+                color: isHomePage 
+                  ? (isDark ? '#FFFFFF' : '#9333EA') 
+                  : (isDark ? '#ececf1' : '#9333EA'),
+                borderColor: isHomePage 
+                  ? (isDark ? 'rgba(255,255,255,0.3)' : 'rgba(147, 51, 234, 0.3)') 
+                  : (isDark ? 'rgba(255,255,255,0.2)' : 'rgba(147, 51, 234, 0.3)'),
                 textTransform: 'none',
                 fontWeight: 500,
                 '&:hover': {
-                  borderColor: isDark ? 'rgba(255,255,255,0.3)' : '#0051D5',
-                  bgcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,122,255,0.1)',
+                  borderColor: isHomePage 
+                    ? (isDark ? 'rgba(255,255,255,0.5)' : 'rgba(147, 51, 234, 0.5)') 
+                    : (isDark ? 'rgba(255,255,255,0.3)' : 'rgba(147, 51, 234, 0.5)'),
+                  bgcolor: isHomePage 
+                    ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(147, 51, 234, 0.1)') 
+                    : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(147, 51, 234, 0.1)'),
                 },
               }}
             >

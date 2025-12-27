@@ -1,6 +1,6 @@
 """
 Quick check script to verify TopLevelAgent tools are correctly created.
-Run this after backend starts to check if create_notebook_from_outline tool exists.
+Run this after backend starts to check if required tools exist.
 """
 import sys
 import os
@@ -49,7 +49,7 @@ def check_tools():
         print(f"  - {tool_id} ({tool_name})")
     
     # Check for required tools
-    required_tools = ['send_message', 'handle_file_upload', 'create_notebook_from_outline']
+    required_tools = ['send_message', 'generate_outline']
     print("\n[3] Checking for required tools...")
     missing_tools = []
     for req_tool in required_tools:

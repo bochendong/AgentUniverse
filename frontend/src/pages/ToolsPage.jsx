@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
-import { Box, Container, Typography, Grid, CircularProgress, Alert, Tabs, Tab, Pagination } from '@mui/material'
-import { Build as BuildIcon } from '@mui/icons-material'
-import { listTools } from '../api/client'
+import { Box, Container, Typography, Grid, CircularProgress, Alert, Tabs, Tab, Pagination, Button, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions } from '@mui/material'
+import { Build as BuildIcon, DeleteSweep as CleanupIcon } from '@mui/icons-material'
+import { listTools, cleanupOldTools } from '../api/client'
 import ToolCard from '../components/ToolCard'
 
 /**
@@ -14,6 +14,9 @@ function ToolsPage() {
   const [selectedAgentType, setSelectedAgentType] = useState('all')
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 6
+  const [cleanupDialogOpen, setCleanupDialogOpen] = useState(false)
+  const [cleanupLoading, setCleanupLoading] = useState(false)
+  const [cleanupResult, setCleanupResult] = useState(null)
 
   useEffect(() => {
     loadTools()
@@ -65,6 +68,29 @@ function ToolsPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  const handleCleanup = async () => {
+    try {
+      setCleanupLoading(true)
+      setCleanupResult(null)
+      const response = await cleanupOldTools()
+      setCleanupResult(response.data)
+      // Reload tools after cleanup
+      await loadTools()
+    } catch (err) {
+      console.error('Failed to cleanup tools:', err)
+      setCleanupResult({
+        error: err.response?.data?.detail || err.message || 'Failed to cleanup tools'
+      })
+    } finally {
+      setCleanupLoading(false)
+    }
+  }
+
+  const handleCleanupDialogClose = () => {
+    setCleanupDialogOpen(false)
+    setCleanupResult(null)
+  }
+
   return (
     <Box
       sx={{
@@ -78,39 +104,57 @@ function ToolsPage() {
       <Container maxWidth="xl" sx={{ py: 4 }}>
         {/* Header */}
         <Box sx={{ mb: 4 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-            <Box
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Box
+                sx={{
+                  bgcolor: '#007AFF',
+                  borderRadius: 2,
+                  p: 1.5,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <BuildIcon sx={{ color: 'white', fontSize: 32 }} />
+              </Box>
+              <Box>
+                <Typography
+                  variant="h4"
+                  sx={{
+                    fontWeight: 700,
+                    color: '#1D1D1F',
+                    mb: 0.5,
+                  }}
+                >
+                  Skills
+                </Typography>
+                <Typography
+                  variant="body1"
+                  sx={{
+                    color: '#86868B',
+                  }}
+                >
+                  查看系统中所有可用的 skills，了解它们的调用方法、输入输出类型和任务描述
+                </Typography>
+              </Box>
+            </Box>
+            <Button
+              variant="outlined"
+              startIcon={<CleanupIcon />}
+              onClick={() => setCleanupDialogOpen(true)}
               sx={{
-                bgcolor: '#007AFF',
-                borderRadius: 2,
-                p: 1.5,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
+                borderColor: '#FF6B6B',
+                color: '#FF6B6B',
+                textTransform: 'none',
+                '&:hover': {
+                  borderColor: '#FF6B6B',
+                  bgcolor: '#FF6B6B15',
+                },
               }}
             >
-              <BuildIcon sx={{ color: 'white', fontSize: 32 }} />
-            </Box>
-            <Box>
-              <Typography
-                variant="h4"
-                sx={{
-                  fontWeight: 700,
-                  color: '#1D1D1F',
-                  mb: 0.5,
-                }}
-              >
-                Skills
-              </Typography>
-              <Typography
-                variant="body1"
-                sx={{
-                  color: '#86868B',
-                }}
-              >
-                查看系统中所有可用的 skills，了解它们的调用方法、输入输出类型和任务描述
-              </Typography>
-            </Box>
+              清理旧工具
+            </Button>
           </Box>
         </Box>
 
@@ -210,6 +254,86 @@ function ToolsPage() {
           </>
         )}
       </Container>
+
+      {/* Cleanup Dialog */}
+      <Dialog
+        open={cleanupDialogOpen}
+        onClose={handleCleanupDialogClose}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>清理旧工具</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            此操作将删除数据库中不再注册的旧工具，并重新同步当前注册的工具。
+          </DialogContentText>
+          
+          {cleanupLoading && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+              <CircularProgress size={24} />
+            </Box>
+          )}
+
+          {cleanupResult && !cleanupLoading && (
+            <Box>
+              {cleanupResult.error ? (
+                <Alert severity="error" sx={{ mb: 2 }}>
+                  {cleanupResult.error}
+                </Alert>
+              ) : (
+                <>
+                  <Alert severity="success" sx={{ mb: 2 }}>
+                    清理完成！
+                  </Alert>
+                  <Box sx={{ mt: 2 }}>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      <strong>删除的工具数量：</strong> {cleanupResult.deleted_tools?.length || 0}
+                    </Typography>
+                    {cleanupResult.deleted_tools && cleanupResult.deleted_tools.length > 0 && (
+                      <Box sx={{ mb: 2 }}>
+                        <Typography variant="body2" sx={{ mb: 1, fontWeight: 600 }}>
+                          已删除的工具：
+                        </Typography>
+                        {cleanupResult.deleted_tools.map((tool, idx) => (
+                          <Typography key={idx} variant="body2" sx={{ ml: 2, color: '#86868B' }}>
+                            • {tool.name} ({tool.id})
+                          </Typography>
+                        ))}
+                      </Box>
+                    )}
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      <strong>当前注册的工具数量：</strong> {cleanupResult.registered_tools_count || 0}
+                    </Typography>
+                    <Typography variant="body2">
+                      <strong>数据库中的工具数量：</strong> {cleanupResult.database_tools_count_after || 0}
+                    </Typography>
+                  </Box>
+                </>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCleanupDialogClose} disabled={cleanupLoading}>
+            {cleanupResult ? '关闭' : '取消'}
+          </Button>
+          {!cleanupResult && (
+            <Button
+              onClick={handleCleanup}
+              variant="contained"
+              disabled={cleanupLoading}
+              sx={{
+                bgcolor: '#FF6B6B',
+                '&:hover': {
+                  bgcolor: '#FF5252',
+                },
+              }}
+            >
+              {cleanupLoading ? '清理中...' : '确认清理'}
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

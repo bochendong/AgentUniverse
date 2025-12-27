@@ -117,6 +117,11 @@ class ToolRegistry:
                     # Attach tool_id for tracking
                     if hasattr(tool, '__dict__'):
                         tool.__dict__['_tool_id'] = tool_id
+                    
+                    # Wrap FunctionTool with logging
+                    from backend.utils.tool_logging_hooks import wrap_function_tool_with_logging
+                    tool = wrap_function_tool_with_logging(tool, tool_id)
+                    
                     print(f"[ToolRegistry] Successfully created tool {tool_id}")
                     return tool
                 except Exception as e:

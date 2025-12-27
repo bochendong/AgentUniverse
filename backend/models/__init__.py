@@ -11,6 +11,7 @@ from backend.models.creation_models import (
     NotebookCreationIntent,
     NotebookSplit,
     SplitPlan,
+    NotebookCreationResult,
 )
 from backend.models.agent_models import AgentCard
 
@@ -25,6 +26,7 @@ __all__ = [
     "NotebookCreationIntent",
     "NotebookSplit",
     "SplitPlan",
+    "NotebookCreationResult",
     # Agent models
     "AgentCard",
 ]

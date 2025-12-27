@@ -38,15 +38,13 @@ class MasterAgent(BaseAgent):
         registry = get_tool_registry()
         
         send_message = registry.create_tool("send_message", self)
-        add_notebook_by_file = registry.create_tool("add_notebook_by_file", self)
         create_notebook = registry.create_tool("create_notebook", self)
-        create_notebook_with_outline = registry.create_tool("create_notebook_with_outline", self)
         
         # Set tools list
-        self.tools = [t for t in [send_message, add_notebook_by_file, create_notebook, create_notebook_with_outline] if t is not None]
+        self.tools = [t for t in [send_message, create_notebook] if t is not None]
         
         # Load prompt with tool usage (after tools are created)
-        tool_ids = ['send_message', 'add_notebook_by_file', 'create_notebook', 'create_notebook_with_outline']
+        tool_ids = ['send_message', 'create_notebook']
         instructions = load_prompt(
             "master_agent",
             variables={"agents_list": get_all_agent_info({})},
@@ -60,7 +58,7 @@ class MasterAgent(BaseAgent):
     def _recreate_tools(self):
         """Recreate tools after loading from database (tools cannot be pickled)."""
         # Default tool IDs for MasterAgent
-        default_tool_ids = ['send_message', 'add_notebook_by_file', 'create_notebook', 'create_notebook_with_outline']
+        default_tool_ids = ['send_message', 'create_notebook']
         self._recreate_tools_from_db(default_tool_ids)
         
         # Ensure tool_ids are saved to database (important for API to return correct tools)
