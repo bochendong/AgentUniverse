@@ -6,12 +6,19 @@ from backend.agent.BaseAgent import BaseAgent, AgentType
 from backend.agent.MasterAgent import MasterAgent
 from backend.tools.utils import get_all_agent_info
 from backend.prompts.prompt_loader import load_prompt
+from agents import AgentOutputSchema
+from backend.api.models import StructuredMessageData
+from backend.config.model_config import get_model_settings
 
 
 class TopLevelAgent(BaseAgent):
     """Top-level agent that manages the root MasterAgent."""
     
     def __init__(self, DB_PATH: Optional[str] = None):
+        # Set output_type for structured output
+        # This allows the agent to return StructuredMessageData directly
+        output_type = AgentOutputSchema(StructuredMessageData, strict_json_schema=False)
+        
         # Initialize the base class first (this creates self.id)
         super().__init__(
             name="TopLevelAgent",
@@ -20,7 +27,8 @@ class TopLevelAgent(BaseAgent):
             mcp_config={},
             agent_type=AgentType.TOP_LEVEL,
             parent_agent_id=None,  # Top level has no parent
-            DB_PATH=DB_PATH
+            DB_PATH=DB_PATH,
+            output_type=output_type
         )
         
         # Save to database after initialization

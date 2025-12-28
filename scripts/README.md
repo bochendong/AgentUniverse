@@ -35,9 +35,14 @@ Stops the FastAPI backend server running on port 8000.
 Starts the Vite frontend development server on `http://localhost:3001`.
 
 **Features:**
+- Checks if Node.js and npm are installed
 - Checks and installs npm dependencies if needed
 - Creates `.env` file with default API URL if missing
 - Starts Vite dev server with proxy configuration
+
+**Prerequisites:**
+- Node.js 18+ and npm must be installed
+- If not installed, see [Node.js Installation Guide](https://nodejs.org/) or check the main README.md
 
 **Usage:**
 ```bash
@@ -72,6 +77,16 @@ Stops both backend and frontend servers.
 ```bash
 ./scripts/stop_all.sh
 ```
+
+## Prerequisites
+
+Before using the scripts, ensure you have the following installed:
+
+- **Node.js 18+** and **npm** (for frontend)
+  - Check installation: `node --version` and `npm --version`
+  - If not installed, see installation instructions in the main [README.md](../README.md)
+- **Python 3.13+** (for backend)
+  - Check installation: `python3 --version`
 
 ## Quick Start
 

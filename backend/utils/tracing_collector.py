@@ -118,6 +118,26 @@ def get_current_activity(session_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def update_current_activity_message(session_id: str, message: str):
+    """Update the message of the current activity for a session.
+    
+    This is useful for showing progress updates during long-running operations,
+    such as notebook creation progress.
+    
+    Args:
+        session_id: Session ID
+        message: New message to display
+    """
+    with _traces_lock:
+        session_traces = _traces.get(session_id, [])
+        # Find the most recent active (not ended) activity
+        for activity in reversed(session_traces):
+            if activity.get('status') == 'running' and not activity.get('ended_at'):
+                activity['message'] = message[:500] if len(message) > 500 else message
+                activity['timestamp'] = datetime.now().isoformat()
+                break
+
+
 def clear_traces(session_id: str):
     """Clear traces for a session."""
     with _traces_lock:

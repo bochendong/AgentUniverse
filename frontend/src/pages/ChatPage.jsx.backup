@@ -63,7 +63,6 @@ import {
   reviseOutline,
   getSessionTracing,
   getFileContent,
-  getTopLevelAgentInfo,
 } from '../api/client'
 import OutlineConfirmation from '../components/OutlineConfirmation'
 import AgentAvatar from '../components/AgentAvatar'
@@ -84,13 +83,12 @@ function ChatPage() {
   const [inputMessage, setInputMessage] = useState('')
   const [uploadedFile, setUploadedFile] = useState(null) // { path: string, name: string }
   const [uploadedImages, setUploadedImages] = useState([]) // Array of { file: File, preview: string, base64: string }
-  // pendingOutline 已移除，确认框现在直接在消息中显示
+  const [pendingOutline, setPendingOutline] = useState(null) // { outline: object, userRequest: string, filePath: string }
   const [creatingNotebook, setCreatingNotebook] = useState(false)
   const [currentActivity, setCurrentActivity] = useState(null) // Current agent activity from tracing
   const [fileViewerOpen, setFileViewerOpen] = useState(false)
   const [fileViewerContent, setFileViewerContent] = useState(null)
   const [fileViewerLoading, setFileViewerLoading] = useState(false)
-  const [topLevelAgentId, setTopLevelAgentId] = useState(null) // TopLevelAgent ID for avatar
   const tracingPollIntervalRef = useRef(null)
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
@@ -168,28 +166,6 @@ function ChatPage() {
       setMessages([])
     }
   }
-
-  // 加载TopLevelAgent信息以获取ID
-  useEffect(() => {
-    const loadTopLevelAgentInfo = async () => {
-      try {
-        const response = await getTopLevelAgentInfo()
-        // TopLevelAgent info structure: { agent: { agent_id: ... }, sub_agents: [...] }
-        // agent_id is in the agent_card object (AgentCard model has agent_id field)
-        const agentId = response.data?.agent?.agent_id
-        console.log('TopLevelAgent info response:', response.data)
-        console.log('Extracted agent_id:', agentId)
-        if (agentId) {
-          setTopLevelAgentId(agentId)
-        } else {
-          console.warn('No agent_id found in response')
-        }
-      } catch (err) {
-        console.error('Failed to load TopLevelAgent info:', err)
-      }
-    }
-    loadTopLevelAgentInfo()
-  }, [])
 
   // 初始化
   useEffect(() => {
@@ -499,7 +475,15 @@ function ChatPage() {
         }
         setMessages(prev => [...prev, assistantMsg])
 
-        // 大纲信息已经在structured_data中，会直接在消息中显示确认框
+        // 检查是否包含大纲信息
+        const structuredData = response.data.structured_data
+        if (structuredData && structuredData.message_type === 'outline' && structuredData.outline) {
+          setPendingOutline({
+            outline: structuredData.outline,
+            userRequest: structuredData.user_request || userMessage,
+            filePath: structuredData.file_path || filePath
+          })
+        }
       } catch (err) {
         console.error('处理论文失败:', err)
         setError(`处理论文失败: ${err.message}`)
@@ -917,8 +901,106 @@ function ChatPage() {
     }
   }
 
-  // handleOutlineRevise, handleOutlineConfirm, handleOutlineCancel 已移除
-  // 这些函数现在作为内联函数定义在outline消息渲染中
+  // 处理大纲修订
+  const handleOutlineRevise = async (feedback) => {
+    if (!pendingOutline) return
+
+    setCreatingNotebook(true) // 使用这个状态表示正在处理
+    try {
+      const response = await reviseOutline(
+        pendingOutline.userRequest,
+        pendingOutline.outline,
+        feedback,
+        pendingOutline.filePath
+      )
+
+      // 更新pending outline为修订后的版本
+      setPendingOutline({
+        outline: response.data.outline,
+        userRequest: pendingOutline.userRequest,
+        filePath: pendingOutline.filePath,
+      })
+
+      // 添加修订消息到对话
+      setMessages([
+        ...messages,
+        {
+          role: 'assistant',
+          content: `根据您的反馈，我已经修改了大纲。\n\n${response.data.outline_info}`,
+        },
+      ])
+    } catch (err) {
+      setError(err.response?.data?.detail || '修改大纲失败')
+      console.error('Failed to revise outline:', err)
+    } finally {
+      setCreatingNotebook(false)
+    }
+  }
+
+  // 处理大纲确认
+  const handleOutlineConfirm = async (outline) => {
+    if (!pendingOutline) return
+
+    setCreatingNotebook(true)
+    
+    // 添加用户确认消息到界面
+    const confirmMessage = { role: 'user', content: '确认' }
+    setMessages([...messages, confirmMessage])
+    
+    try {
+      // 构建包含完整大纲信息的消息
+      // 将大纲 JSON 和文件路径包含在消息中，让 TopLevelAgent 能够提取
+      const outlineJson = JSON.stringify(outline, null, 2)
+      const confirmMessageWithOutline = `确认创建笔记本。
+
+**大纲信息（JSON格式）：**
+\`\`\`json
+${outlineJson}
+\`\`\`
+
+**文件路径：**
+${pendingOutline.filePath}
+
+请使用 create_notebook_from_outline 工具创建笔记本。`
+
+      // 发送消息给 TopLevelAgent（它会识别确认并调用工具）
+      const response = await chatWithTopLevelAgent(confirmMessageWithOutline, currentSessionId)
+      const agentResponse = response.data.response
+
+      // 添加 agent 回复到对话中
+      setMessages([
+        ...messages,
+        confirmMessage,
+        { role: 'assistant', content: agentResponse },
+      ])
+
+      // 清除pending outline
+      setPendingOutline(null)
+
+      // 刷新会话列表
+      await loadSessions()
+    } catch (err) {
+      setError(err.response?.data?.detail || '创建笔记本失败')
+      console.error('Failed to create notebook:', err)
+      // 恢复消息状态
+      setMessages(messages)
+    } finally {
+      setCreatingNotebook(false)
+    }
+  }
+
+  // 处理大纲取消
+  const handleOutlineCancel = () => {
+    setPendingOutline(null)
+    // 添加取消消息
+    setMessages([
+      ...messages,
+      {
+        role: 'assistant',
+        content: '已取消创建笔记本。',
+      },
+    ])
+  }
 
   const handleFileChange = async (event) => {
     const file = event.target.files?.[0]
@@ -999,7 +1081,15 @@ function ChatPage() {
         }
         setMessages(prev => [...prev, assistantMsg])
 
-        // 大纲信息已经在structured_data中，会直接在消息中显示确认框
+        // 检查是否包含大纲信息
+        const structuredData = response.data.structured_data
+        if (structuredData && structuredData.message_type === 'outline' && structuredData.outline) {
+          setPendingOutline({
+            outline: structuredData.outline,
+            userRequest: structuredData.user_request || userMessage,
+            filePath: structuredData.file_path || filePath
+          })
+        }
       } catch (err) {
         console.error('处理文件失败:', err)
         setError(`处理文件失败: ${err.message}`)
@@ -1082,11 +1172,9 @@ function ChatPage() {
         variant="persistent"
         open={sidebarOpen}
         sx={{
-          width: sidebarOpen ? drawerWidth : 0,
+          width: drawerWidth,
           flexShrink: 0,
           position: 'relative',
-          transition: 'width 0.3s ease',
-          overflow: 'hidden',
           '& .MuiDrawer-paper': {
             width: drawerWidth,
             boxSizing: 'border-box',
@@ -1097,8 +1185,6 @@ function ChatPage() {
             height: '100%',
             top: 0,
             zIndex: 0,
-            transition: 'transform 0.3s ease',
-            transform: sidebarOpen ? 'translateX(0)' : `translateX(-${drawerWidth}px)`,
           },
         }}
       >
@@ -1361,7 +1447,6 @@ function ChatPage() {
             overflowX: 'hidden',
             px: { xs: 2, sm: 4 },
             py: 4,
-            position: 'relative',
             '&::-webkit-scrollbar': {
               width: '8px',
             },
@@ -1377,32 +1462,6 @@ function ChatPage() {
             },
           }}
         >
-          {/* Sidebar Toggle Button - Show when sidebar is closed */}
-          {!sidebarOpen && (
-            <Box
-              sx={{
-                mb: 2,
-                display: 'inline-flex',
-              }}
-            >
-              <IconButton
-                onClick={() => setSidebarOpen(true)}
-                size="small"
-                sx={{
-                  bgcolor: 'transparent',
-                  color: isDark ? '#8e8ea0' : '#86868B',
-                  border: 'none',
-                  '&:hover': {
-                    bgcolor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)',
-                    color: isDark ? '#ececf1' : '#1D1D1F',
-                  },
-                  transition: 'all 0.2s',
-                }}
-              >
-                <MenuIcon fontSize="small" />
-              </IconButton>
-            </Box>
-          )}
 
           {messages.length === 0 ? (
             <Box
@@ -1439,71 +1498,52 @@ function ChatPage() {
             </Box>
           ) : (
             <Box>
-              {messages.map((message, index) => {
-                const isUser = message.role === 'user'
-                return (
+              {/* Pending Outline Confirmation */}
+              {pendingOutline && (
+                <Box sx={{ mb: 2, px: { xs: 0, sm: 2 } }}>
+                  <OutlineConfirmation
+                    outline={pendingOutline.outline}
+                    onConfirm={handleOutlineConfirm}
+                    onCancel={handleOutlineCancel}
+                    onRevise={handleOutlineRevise}
+                    isCreating={creatingNotebook}
+                    isRevising={creatingNotebook}
+                  />
+                </Box>
+              )}
+
+              {messages.map((message, index) => (
                 <Fade in key={index} timeout={300}>
                   <Box
                     sx={{
                       display: 'flex',
-                      justifyContent: isUser ? 'flex-end' : 'flex-start',
+                      gap: 2,
                       py: 3,
                       borderBottom: index < messages.length - 1 
                         ? (isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.06)')
                         : 'none',
-                      bgcolor: isUser
+                      bgcolor: message.role === 'user' 
                         ? (isDark ? '#343541' : '#FFFFFF')
                         : (isDark ? '#444654' : '#F5F5F7'),
                       mx: -2,
                       px: 2,
                     }}
                   >
-                    <Box
+                    <Avatar
                       sx={{
-                        display: 'flex',
-                        flexDirection: isUser ? 'row-reverse' : 'row',
-                        gap: 2,
-                        maxWidth: '85%',
+                        width: 32,
+                        height: 32,
+                        bgcolor: message.role === 'user' 
+                          ? (isDark ? '#19c37d' : '#007AFF')
+                          : (isDark ? '#ab68ff' : '#5856D6'),
+                        flexShrink: 0,
+                        color: 'white',
+                        fontWeight: 600,
                       }}
                     >
-                      {isUser ? (
-                        <Avatar
-                          sx={{
-                            width: 32,
-                            height: 32,
-                            bgcolor: isDark ? '#19c37d' : '#007AFF',
-                            flexShrink: 0,
-                            color: 'white',
-                            fontWeight: 600,
-                          }}
-                        >
-                          U
-                        </Avatar>
-                      ) : (
-                        topLevelAgentId ? (
-                          <AgentAvatar
-                            seed={topLevelAgentId}
-                            size={32}
-                            sx={{
-                              flexShrink: 0,
-                            }}
-                          />
-                        ) : (
-                          <Avatar
-                            sx={{
-                              width: 32,
-                              height: 32,
-                              bgcolor: isDark ? '#ab68ff' : '#5856D6',
-                              flexShrink: 0,
-                              color: 'white',
-                              fontWeight: 600,
-                            }}
-                          >
-                            AI
-                          </Avatar>
-                        )
-                      )}
-                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                      {message.role === 'user' ? 'U' : 'AI'}
+                    </Avatar>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
                       {message.role === 'assistant' ? (
                         <Box
                           sx={{
@@ -1761,7 +1801,6 @@ function ChatPage() {
                             <Card
                               sx={{
                                 mb: 1.5,
-                                maxWidth: 400,
                                 bgcolor: isDark ? '#40414f' : '#FFFFFF',
                                 border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)',
                                 borderRadius: '8px',
@@ -1778,21 +1817,21 @@ function ChatPage() {
                               onClick={() => handleOpenFileViewer(message.fileInfo.path, message.fileInfo.name)}
                             >
                               <CardActionArea>
-                                <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5 }}>
+                                <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 2 }}>
                                   <FileIcon 
                                     sx={{ 
-                                      fontSize: 24, 
+                                      fontSize: 32, 
                                       color: isDark ? '#19c37d' : '#007AFF',
                                       flexShrink: 0,
                                     }} 
                                   />
                                   <Box sx={{ flex: 1, minWidth: 0 }}>
                                     <Typography
-                                      variant="body2"
+                                      variant="body1"
                                       sx={{
                                         fontWeight: 600,
                                         color: isDark ? '#ececf1' : '#1D1D1F',
-                                        mb: 0.25,
+                                        mb: 0.5,
                                         overflow: 'hidden',
                                         textOverflow: 'ellipsis',
                                         whiteSpace: 'nowrap',
@@ -1807,10 +1846,9 @@ function ChatPage() {
                                         display: 'flex',
                                         alignItems: 'center',
                                         gap: 0.5,
-                                        fontSize: '0.7rem',
                                       }}
                                     >
-                                      <VisibilityIcon sx={{ fontSize: 12 }} />
+                                      <VisibilityIcon sx={{ fontSize: 14 }} />
                                       点击查看文件内容
                                     </Typography>
                                   </Box>
@@ -1869,19 +1907,19 @@ function ChatPage() {
                         </Box>
                       )}
                       
-                      {/* 检测并显示大纲确认框 */}
+                      {/* 检测并显示大纲卡片 */}
                       {message.role === 'assistant' && message.structured_data && message.structured_data.message_type === 'outline' && (() => {
                         const outlineData = message.structured_data
                         const outline = outlineData.outline
+                        const glowColor = '#007AFF' // 蓝色 - outline
                         
-                        // 创建确认处理函数
-                        const handleConfirm = async (outlineToConfirm) => {
+                        const handleOutlineConfirm = async () => {
                           try {
                             setSending(true)
                             setError(null)
                             
                             // 构建确认消息，格式与 TopLevelAgent 期望的一致
-                            const outlineJson = JSON.stringify(outlineToConfirm || outline, null, 2)
+                            const outlineJson = JSON.stringify(outline, null, 2)
                             const confirmMessage = `确认创建笔记本。
 
 **大纲信息（JSON格式）：**
@@ -1891,7 +1929,7 @@ ${outlineJson}
 
 ${outlineData.file_path ? `**文件路径：**\n${outlineData.file_path}\n\n` : ''}请根据此大纲创建笔记本。`
                             
-                            const response = await chatWithTopLevelAgent(confirmMessage, currentSessionId)
+                            const response = await chatWithTopLevelAgent(confirmMessage, sessionId)
                             const agentResponse = response.data.response
                             const newStructuredData = response.data.structured_data || null
                             
@@ -1919,57 +1957,143 @@ ${outlineData.file_path ? `**文件路径：**\n${outlineData.file_path}\n\n` : 
                           }
                         }
                         
-                        // 创建修订处理函数
-                        const handleRevise = async (feedback) => {
-                          try {
-                            setSending(true)
-                            setError(null)
-                            
-                            const response = await reviseOutline(
-                              outlineData.user_request || '',
-                              outline,
-                              feedback,
-                              outlineData.file_path || null
-                            )
-                            
-                            // 更新消息中的outline
-                            setMessages(prev => prev.map((msg, idx) => 
-                              idx === index && msg.structured_data?.message_type === 'outline'
-                                ? {
-                                    ...msg,
-                                    structured_data: {
-                                      ...msg.structured_data,
-                                      outline: response.data.outline,
-                                    }
-                                  }
-                                : msg
-                            ))
-                          } catch (err) {
-                            setError(err.response?.data?.detail || '修改大纲失败')
-                            console.error('Failed to revise outline:', err)
-                          } finally {
-                            setSending(false)
-                          }
-                        }
-                        
-                        // 创建取消处理函数
-                        const handleCancel = () => {
-                          setMessages(prev => [...prev, {
-                            role: 'assistant',
-                            content: '已取消创建笔记本。',
-                          }])
-                        }
-                        
                         return (
-                          <Box sx={{ mt: 2 }}>
-                            <OutlineConfirmation
-                              outline={outline}
-                              onConfirm={handleConfirm}
-                              onCancel={handleCancel}
-                              onRevise={handleRevise}
-                              isCreating={sending}
-                              isRevising={sending}
-                            />
+                          <Box sx={{ mt: 2, maxWidth: 500 }}>
+                            <Box
+                              sx={{
+                                position: 'relative',
+                                borderRadius: 4,
+                                p: 3,
+                                bgcolor: isDark ? '#2C2C2E' : 'white',
+                                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                overflow: 'hidden',
+                                border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.06)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.3)' : '0 4px 16px rgba(0,0,0,0.08)',
+                              }}
+                            >
+                              {/* Glow effect */}
+                              <Box
+                                sx={{
+                                  position: 'absolute',
+                                  top: -50,
+                                  right: -50,
+                                  width: 100,
+                                  height: 100,
+                                  borderRadius: '50%',
+                                  background: `radial-gradient(circle, ${glowColor}40, transparent 70%)`,
+                                  filter: 'blur(25px)',
+                                  opacity: 0.4,
+                                }}
+                              />
+                              
+                              {/* Content */}
+                              <Box sx={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column' }}>
+                                {/* Header */}
+                                <Box sx={{ mb: 2 }}>
+                                  <Typography
+                                    variant="h6"
+                                    sx={{
+                                      fontWeight: 600,
+                                      color: isDark ? '#ececf1' : '#1D1D1F',
+                                      mb: 0.5,
+                                    }}
+                                  >
+                                    📋 大纲已生成
+                                  </Typography>
+                                  <Typography
+                                    variant="body2"
+                                    sx={{
+                                      color: isDark ? '#8e8ea0' : '#86868B',
+                                    }}
+                                  >
+                                    {outline.notebook_title}
+                                  </Typography>
+                                </Box>
+                                
+                                {/* Description */}
+                                {outline.notebook_description && (
+                                  <Box sx={{ mb: 2 }}>
+                                    <Typography
+                                      variant="body2"
+                                      sx={{
+                                        color: isDark ? '#8e8ea0' : '#86868B',
+                                        whiteSpace: 'pre-wrap',
+                                        lineHeight: 1.6,
+                                        display: '-webkit-box',
+                                        WebkitLineClamp: 3,
+                                        WebkitBoxOrient: 'vertical',
+                                        overflow: 'hidden',
+                                      }}
+                                    >
+                                      {outline.notebook_description}
+                                    </Typography>
+                                  </Box>
+                                )}
+                                
+                                {/* Sections count */}
+                                <Box sx={{ mb: 2 }}>
+                                  <Typography
+                                    variant="body2"
+                                    sx={{
+                                      color: isDark ? '#8e8ea0' : '#86868B',
+                                    }}
+                                  >
+                                    共 {Object.keys(outline.outlines || {}).length} 个章节
+                                  </Typography>
+                                </Box>
+                                
+                                {/* Divider */}
+                                <Divider sx={{ my: 1.5, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }} />
+                                
+                                {/* Actions */}
+                                <Box sx={{ display: 'flex', gap: 1.5, justifyContent: 'flex-end' }}>
+                                  <Button
+                                    variant="outlined"
+                                    size="small"
+                                    onClick={() => {
+                                      // 显示完整大纲确认UI（使用旧的 OutlineConfirmation 组件）
+                                      setPendingOutline({
+                                        outline: outline,
+                                        userRequest: outlineData.user_request || '',
+                                        filePath: outlineData.file_path || null,
+                                      })
+                                    }}
+                                    disabled={sending}
+                                    sx={{
+                                      borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)',
+                                      color: isDark ? '#ececf1' : '#1D1D1F',
+                                      '&:hover': {
+                                        borderColor: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)',
+                                        bgcolor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+                                      },
+                                    }}
+                                  >
+                                    查看详情
+                                  </Button>
+                                  <Button
+                                    variant="contained"
+                                    size="small"
+                                    onClick={handleOutlineConfirm}
+                                    disabled={sending}
+                                    sx={{
+                                      bgcolor: glowColor,
+                                      color: 'white',
+                                      '&:hover': {
+                                        bgcolor: '#0051D5',
+                                      },
+                                      '&:disabled': {
+                                        bgcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+                                        color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)',
+                                      },
+                                    }}
+                                  >
+                                    {sending ? '创建中...' : '确认并创建'}
+                                  </Button>
+                                </Box>
+                              </Box>
+                            </Box>
                           </Box>
                         )
                       })()}
@@ -2136,11 +2260,9 @@ ${outlineData.file_path ? `**文件路径：**\n${outlineData.file_path}\n\n` : 
                         return null
                       })()}
                     </Box>
-                    </Box>
                   </Box>
                 </Fade>
-                )
-              })}
+              ))}
               {sending && (
                 <Box
                   sx={{
@@ -2183,20 +2305,12 @@ ${outlineData.file_path ? `**文件路径：**\n${outlineData.file_path}\n\n` : 
                             color: isDark ? '#8e8ea0' : '#86868B', 
                             fontSize: '0.75rem',
                             ml: 3,
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-word',
                           }}
                         >
                           {currentActivity.type === 'agent_run' 
-                            ? (currentActivity.message?.includes('[') && currentActivity.message?.includes(']'))
-                              ? currentActivity.message  // 如果是进度消息（包含[]），直接显示完整消息
-                              : `处理消息: ${currentActivity.message?.substring(0, 80)}${currentActivity.message?.length > 80 ? '...' : ''}`
+                            ? `处理消息: ${currentActivity.message?.substring(0, 80)}${currentActivity.message?.length > 80 ? '...' : ''}`
                             : currentActivity.type === 'tool_call'
                             ? (() => {
-                                // 检查是否是进度消息（包含[]），如果是则直接显示
-                                if (currentActivity.message?.includes('[') && currentActivity.message?.includes(']')) {
-                                  return currentActivity.message
-                                }
                                 // 从 message 中提取工具名称
                                 const toolMatch = currentActivity.message?.match(/Calling tool:\s*(.+?)(?:\s+with|$)/i)
                                 const toolName = toolMatch ? toolMatch[1] : '工具'
@@ -2228,14 +2342,6 @@ ${outlineData.file_path ? `**文件路径：**\n${outlineData.file_path}\n\n` : 
             bgcolor: isDark ? '#343541' : '#F5F5F7',
             px: { xs: 2, sm: 4 },
             py: 2,
-            display: 'flex',
-            justifyContent: 'center',
-          }}
-        >
-          <Box
-            sx={{
-              width: '100%',
-              maxWidth: '768px',
           }}
         >
           {/* Uploaded file info */}
@@ -2464,7 +2570,6 @@ ${outlineData.file_path ? `**文件路径：**\n${outlineData.file_path}\n\n` : 
               {sending ? <StopIcon /> : <SendIcon />}
             </IconButton>
           </Paper>
-          </Box>
           </Box>
         </Box>
       </Box>

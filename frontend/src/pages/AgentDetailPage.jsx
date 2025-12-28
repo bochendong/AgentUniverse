@@ -16,6 +16,7 @@ import {
   TextField,
   Collapse,
   IconButton,
+  Avatar,
 } from '@mui/material'
 import {
   ArrowBack as BackIcon,
@@ -42,12 +43,15 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { prism } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import 'katex/dist/katex.min.css'
 import { getAgent, getNotebook, getNotebookContent, getAgentHierarchy, splitNotebook, getAgentParent, chatWithAgent, getAgentInstructions } from '../api/client'
+import { useTheme } from '../contexts/ThemeContext'
+import { imageToBase64 } from '../utils/imageUtils'
 import AgentAvatar from '../components/AgentAvatar'
 import NotebookContent from '../components/notebook/NotebookContent'
 import InstructionsEditorInline from '../components/InstructionsEditorInline'
 import HierarchyGraphView from '../components/HierarchyGraphView'
 import AgentToolsView from '../components/AgentToolsView'
 import AgentInstructionsView from '../components/AgentInstructionsView'
+import ChatInput from '../components/chat/ChatInput'
 
 /**
  * Parse agent_card text format to extract description and outline
@@ -119,6 +123,8 @@ function parseAgentCard(agentCardText) {
 function AgentDetailPage() {
   const { agentId } = useParams()
   const navigate = useNavigate()
+  const theme = useTheme()
+  const isDark = theme.mode === 'dark'
   const [agent, setAgent] = useState(null)
   const [notebook, setNotebook] = useState(null)
   const [notebookContent, setNotebookContent] = useState(null)
@@ -135,7 +141,9 @@ function AgentDetailPage() {
   const [chatMessages, setChatMessages] = useState([])
   const [chatSending, setChatSending] = useState(false)
   const [chatSessionId, setChatSessionId] = useState(null)
+  const [uploadedImages, setUploadedImages] = useState([])
   const chatMessagesEndRef = useRef(null)
+  const imageInputRef = useRef(null)
   const [descriptionExpanded, setDescriptionExpanded] = useState(false)
   const [outlineExpanded, setOutlineExpanded] = useState(false)
   const [showNotebookAdvancedMode, setShowNotebookAdvancedMode] = useState(false)
@@ -350,14 +358,34 @@ function AgentDetailPage() {
   }
 
   const handleChatSend = async () => {
-    if (!chatInput.trim() || chatSending) return
+    if ((!chatInput.trim() && uploadedImages.length === 0) || chatSending) return
 
-    const userMessage = chatInput.trim()
+    // Build user message
+    let userMessage = chatInput.trim()
+
+    // 如果有上传的图片，将图片信息添加到消息中（以base64形式）
+    if (uploadedImages.length > 0) {
+      const imageInfo = `\n\n已上传 ${uploadedImages.length} 张图片。`
+      userMessage = userMessage + imageInfo
+      // Note: chatWithAgent API doesn't support images directly, so we include them in text
+      // For now, just notify the user about the images
+    }
+
+    // 保存图片信息（在清空前）
+    const savedImages = [...uploadedImages]
+
     setChatInput('')
+    setUploadedImages([])
     setChatSending(true)
 
-    // Add user message to chat
-    const newMessages = [...chatMessages, { role: 'user', content: userMessage }]
+    // Add user message to chat (with image info)
+    const displayMessage = chatInput.trim() || 
+      (uploadedImages.length > 0 ? `已上传 ${uploadedImages.length} 张图片` : '')
+    const newMessages = [...chatMessages, { 
+      role: 'user', 
+      content: displayMessage,
+      images: savedImages.length > 0 ? savedImages.map(img => img.preview) : null,
+    }]
     setChatMessages(newMessages)
 
     try {
@@ -418,6 +446,65 @@ function AgentDetailPage() {
     } finally {
       setChatSending(false)
     }
+  }
+
+  // Handle image upload
+  const handleImageChange = async (event) => {
+    const files = Array.from(event.target.files || [])
+    if (files.length === 0) return
+
+    // Check file types
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+    const invalidFiles = files.filter(file => !allowedTypes.includes(file.type))
+    
+    if (invalidFiles.length > 0) {
+      setError('不支持的文件类型。请上传图片文件（JPEG, PNG, GIF, WebP）。')
+      return
+    }
+
+    try {
+      setError(null)
+      const newImages = []
+
+      for (const file of files) {
+        // Check file size (max 10MB)
+        if (file.size > 10 * 1024 * 1024) {
+          setError(`图片 ${file.name} 太大，最大支持 10MB`)
+          continue
+        }
+
+        // Create preview
+        const preview = URL.createObjectURL(file)
+        
+        // Convert to base64
+        const base64 = await imageToBase64(file)
+        
+        newImages.push({
+          file,
+          preview,
+          base64,
+        })
+      }
+
+      setUploadedImages(prev => [...prev, ...newImages])
+    } catch (err) {
+      console.error('图片处理失败:', err)
+      setError(`图片处理失败: ${err.message}`)
+    } finally {
+      // Clear file input
+      if (imageInputRef.current) {
+        imageInputRef.current.value = ''
+      }
+    }
+  }
+
+  const handleRemoveImage = (index) => {
+    setUploadedImages(prev => {
+      const newImages = [...prev]
+      URL.revokeObjectURL(newImages[index].preview)
+      newImages.splice(index, 1)
+      return newImages
+    })
   }
 
   return (
@@ -1382,8 +1469,6 @@ function AgentDetailPage() {
                       height: 'calc(100vh - 180px)',
                       maxHeight: 'calc(100vh - 180px)',
                       width: '100%',
-                      px: 3,
-                      pb: 3,
                     }}
                   >
                     {/* Messages Area */}
@@ -1391,10 +1476,9 @@ function AgentDetailPage() {
                       sx={{
                         flex: 1,
                         overflowY: 'auto',
-                        mb: 2,
-                        p: 2,
-                        bgcolor: '#F5F5F7',
-                        borderRadius: 2,
+                        overflowX: 'hidden',
+                        px: { xs: 2, sm: 4 },
+                        py: 4,
                         minHeight: 0,
                       }}
                     >
@@ -1413,22 +1497,115 @@ function AgentDetailPage() {
                           </Typography>
                         </Box>
                       ) : (
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                          {chatMessages.map((msg, idx) => (
+                        <Box>
+                          {chatMessages.map((msg, idx) => {
+                            const isUser = msg.role === 'user'
+                            return (
                             <Box
                               key={idx}
                               sx={{
                                 display: 'flex',
-                                justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                              }}
-                            >
-                              <Paper
+                                  justifyContent: isUser ? 'flex-end' : 'flex-start',
+                                  py: 3,
+                                  borderBottom: idx < chatMessages.length - 1 
+                                    ? (isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.06)')
+                                    : 'none',
+                                  bgcolor: isUser
+                                    ? (isDark ? '#343541' : '#FFFFFF')
+                                    : (isDark ? '#444654' : '#F5F5F7'),
+                                }}
+                              >
+                                <Box
                                 sx={{
-                                  p: 2,
-                                  maxWidth: '80%',
-                                  bgcolor: msg.role === 'user' ? '#007AFF' : 'white',
-                                  color: msg.role === 'user' ? 'white' : '#1D1D1F',
-                                  borderRadius: 2,
+                                    display: 'flex',
+                                    flexDirection: isUser ? 'row-reverse' : 'row',
+                                    gap: 2,
+                                    maxWidth: '85%',
+                                  }}
+                                >
+                                  {isUser ? (
+                                    <Avatar
+                                      sx={{
+                                        width: 32,
+                                        height: 32,
+                                        bgcolor: isDark ? '#19c37d' : '#007AFF',
+                                        flexShrink: 0,
+                                        color: 'white',
+                                        fontWeight: 600,
+                                      }}
+                                    >
+                                      U
+                                    </Avatar>
+                                  ) : (
+                                    <AgentAvatar
+                                      seed={agent?.id || agent?.avatar_seed}
+                                      size={32}
+                                      sx={{
+                                        flexShrink: 0,
+                                      }}
+                                    />
+                                  )}
+                                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                                    <Box
+                                      sx={{
+                                        '& p': {
+                                          margin: '0.5em 0',
+                                          color: isDark ? '#ececf1' : '#1D1D1F',
+                                          lineHeight: 1.75,
+                                        },
+                                        '& pre': {
+                                          bgcolor: isDark ? '#1e1e1e' : '#F5F5F7',
+                                          borderRadius: '8px',
+                                          padding: '16px',
+                                          overflow: 'auto',
+                                          margin: '1em 0',
+                                          border: isDark ? 'none' : '1px solid rgba(0,0,0,0.1)',
+                                          '& code': {
+                                            fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+                                            color: isDark ? '#ececf1' : '#1D1D1F',
+                                          },
+                                        },
+                                        '& code': {
+                                          bgcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                                          padding: '2px 6px',
+                                          borderRadius: '4px',
+                                          fontSize: '0.9em',
+                                          fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+                                          color: isDark ? '#ececf1' : '#1D1D1F',
+                                        },
+                                        '& ul, & ol': {
+                                          paddingLeft: '1.5em',
+                                          margin: '0.5em 0',
+                                        },
+                                        '& li': {
+                                          margin: '0.25em 0',
+                                        },
+                                        '& h1, & h2, & h3, & h4, & h5, & h6': {
+                                          marginTop: '1em',
+                                          marginBottom: '0.5em',
+                                          fontWeight: 600,
+                                          color: isDark ? '#ececf1' : '#1D1D1F',
+                                        },
+                                        '& blockquote': {
+                                          borderLeft: `4px solid ${isDark ? '#19c37d' : '#007AFF'}`,
+                                          paddingLeft: '1em',
+                                          margin: '1em 0',
+                                          color: isDark ? '#8e8ea0' : '#86868B',
+                                        },
+                                        '& table': {
+                                          borderCollapse: 'collapse',
+                                          width: '100%',
+                                          margin: '1em 0',
+                                          '& th, & td': {
+                                            border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)',
+                                            padding: '8px',
+                                            color: isDark ? '#ececf1' : '#1D1D1F',
+                                          },
+                                          '& th': {
+                                            bgcolor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+                                            fontWeight: 600,
+                                          },
+                                        },
                                 }}
                               >
                                 <ReactMarkdown
@@ -1456,53 +1633,44 @@ function AgentDetailPage() {
                                 >
                                   {msg.content}
                                 </ReactMarkdown>
-                              </Paper>
                             </Box>
-                          ))}
+                                  </Box>
+                                </Box>
+                              </Box>
+                            )
+                          })}
                           <div ref={chatMessagesEndRef} />
                         </Box>
                       )}
                     </Box>
                     
                     {/* Input Area */}
-                    <Box sx={{ display: 'flex', gap: 1 }}>
-                      <TextField
-                        fullWidth
-                        multiline
-                        maxRows={4}
-                        placeholder="输入消息..."
-                        value={chatInput}
-                        onChange={(e) => setChatInput(e.target.value)}
-                        onKeyPress={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault()
-                            handleChatSend()
-                          }
-                        }}
-                        disabled={chatSending}
+                    <Box
                         sx={{
-                          '& .MuiOutlinedInput-root': {
-                            borderRadius: 2,
-                          },
-                        }}
-                      />
-                      <Button
-                        variant="contained"
-                        startIcon={<SendIcon />}
-                        onClick={handleChatSend}
-                        disabled={!chatInput.trim() || chatSending}
+                        display: 'flex',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Box
                         sx={{
-                          bgcolor: '#007AFF',
-                          '&:hover': {
-                            bgcolor: '#0051D5',
-                          },
-                          '&:disabled': {
-                            bgcolor: '#86868B',
-                          },
+                          width: '100%',
+                          maxWidth: '768px',
                         }}
                       >
-                        发送
-                      </Button>
+                        <ChatInput
+                          value={chatInput}
+                          onChange={setChatInput}
+                          onSend={handleChatSend}
+                          sending={chatSending}
+                          placeholder="输入消息..."
+                          uploadedImages={uploadedImages}
+                          onImageRemove={handleRemoveImage}
+                          imageInputRef={imageInputRef}
+                          onImageChange={handleImageChange}
+                          onAddQuestionImage={() => imageInputRef.current?.click()}
+                          isDark={isDark}
+                        />
+                      </Box>
                     </Box>
                   </Box>
                 )}

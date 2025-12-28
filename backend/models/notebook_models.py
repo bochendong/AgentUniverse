@@ -1,5 +1,7 @@
 """Notebook content structure models - 笔记本内容结构模型"""
 
+from __future__ import annotations
+
 from typing import Optional, List, Literal, Dict
 from pydantic import BaseModel, ConfigDict
 
@@ -51,7 +53,7 @@ class Theorem(BaseModel):
     
     theorem: str  # 定理内容（必需）
     proof: Optional[str] = None  # 证明内容（可选）
-    examples: list[Example] = []  # 该定理相关的例子（可选）
+    examples: List[Example] = []  # 该定理相关的例子（可选）
 
 
 class ConceptBlock(BaseModel):
@@ -63,9 +65,9 @@ class ConceptBlock(BaseModel):
     definition_id: Optional[str] = None  # definition字段的ID
     
     definition: str  # 定义（必需）
-    examples: list[Example] = []  # 相关例子列表
-    notes: list[str] = []  # 相关笔记/注意点（可选）
-    theorems: list[Theorem] = []  # 相关定理列表
+    examples: List[Example] = []  # 相关例子列表
+    notes: List[str] = []  # 相关笔记/注意点（可选）
+    theorems: List[Theorem] = []  # 相关定理列表
 
 
 class Section(BaseModel):
@@ -80,11 +82,11 @@ class Section(BaseModel):
     
     section_title: str
     introduction: str  # 介绍
-    concept_blocks: list[ConceptBlock]  # 概念块列表
-    standalone_examples: list[Example] = []  # 独立例子（可选）
-    standalone_notes: list[str] = []  # 独立笔记（可选）
+    concept_blocks: List[ConceptBlock]  # 概念块列表
+    standalone_examples: List[Example] = []  # 独立例子（可选）
+    standalone_notes: List[str] = []  # 独立笔记/注意点（可选）
     summary: str  # 总结
-    exercises: list[Example] = []  # 练习题
+    exercises: List[Example] = []  # 练习题
 
 
 class Outline(BaseModel):
@@ -93,4 +95,4 @@ class Outline(BaseModel):
     
     notebook_title: str
     notebook_description: str  # 描述笔记本包含什么知识和不包含什么知识，确定笔记本的边界
-    outlines: dict[str, str]
+    outlines: Dict[str, str]

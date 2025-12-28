@@ -12,6 +12,7 @@ from backend.agent.MasterAgent import MasterAgent
 from backend.agent.NoteBookAgent import NoteBookAgent
 from backend.agent.BaseAgent import AgentType
 from backend.tools.utils import get_all_agent_info
+from backend.models import AgentCard
 from backend.database.session_db import create_session, list_sessions, delete_session, get_conversations
 from backend.utils.tracing_collector import track_agent_run
 from backend.database.agent_db import get_db_path
@@ -48,11 +49,22 @@ async def get_top_level_agent_info():
                 else:
                     agent.tools = []
         
-        # Get all agent info for the card
-        all_agent_info = get_all_agent_info()
+        # Get agent card (this internally calls get_all_agent_info with agent_dict)
+        # Note: TopLevelAgent.agent_card() returns a string, not an AgentCard object
+        # So we need to create a proper agent card structure
+        agent_dict = agent._load_sub_agents_dict() if hasattr(agent, '_load_sub_agents_dict') else {}
+        all_agent_info = get_all_agent_info(agent_dict)
         
-        # Serialize agent card
-        agent_card = _serialize_agent_card(agent.get_agent_card(all_agent_info))
+        # Create agent card structure for TopLevelAgent
+        from backend.models import AgentCard
+        agent_card_obj = AgentCard(
+            title=agent.name,
+            agent_id=agent.id,
+            parent_agent_id=None,
+            description="Top-level agent that manages the root MasterAgent.",
+            outline={}
+        )
+        agent_card = _serialize_agent_card(agent_card_obj)
         
         return {
             "agent": agent_card,
@@ -195,40 +207,48 @@ async def source_chat_with_top_level_agent(request: SourceChatRequest):
         user_message = request.message or ""
         
         # Prepare file content if file_path is provided
-        # 参考示例代码，使用 input_file 类型处理文件上传
+        # OpenAI API 的 input_file 只支持 PDF，其他文件类型需要读取内容作为文本发送
         file_content_item = None
+        file_text_content = None
         if request.file_path:
-            file_name = os.path.basename(request.file_path)
-            file_ext = os.path.splitext(request.file_path)[1].lower()
+            # 解析文件路径（支持相对路径和仅文件名）
+            from backend.tools.agent_as_tools.section_creators.utils import _resolve_file_path
+            resolved_file_path = _resolve_file_path(request.file_path)
             
-            # Read file and convert to base64
-            try:
-                with open(request.file_path, "rb") as f:
-                    file_bytes = f.read()
-                    file_content_b64 = base64.b64encode(file_bytes).decode("utf-8")
-                
-                # Determine MIME type based on file extension
-                if file_ext == '.pdf':
-                    file_mime_type = "application/pdf"
-                elif file_ext in ['.doc', '.docx']:
-                    file_mime_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                elif file_ext in ['.md', '.markdown']:
-                    file_mime_type = "text/markdown"
-                else:
-                    file_mime_type = "application/octet-stream"
-                
-                # 创建 input_file 类型的消息内容（参考 Pdf.md 示例）
-                file_content_item = {
-                    "type": "input_file",
-                    "file_data": f"data:{file_mime_type};base64,{file_content_b64}",
-                    "filename": file_name,
-                }
-            except Exception as e:
-                print(f"Warning: Failed to read file {request.file_path}: {e}")
-                # Fallback to old method if file reading fails
-                file_info = f"\n\n我需要上传文件并创建笔记本。\n文件路径：{request.file_path}\n文件名：{file_name}\n\n请调用 generate_outline 工具，参数为：\n- file_path: \"{request.file_path}\"\n- user_request: \"{user_message.strip() or '请根据文件内容创建笔记本'}\""
-                user_message = user_message + file_info if user_message.strip() else f"请处理上传的文件并创建笔记本。{file_info}"
-                file_content_item = None
+            file_name = os.path.basename(resolved_file_path)
+            file_ext = os.path.splitext(resolved_file_path)[1].lower()
+            
+            if file_ext == '.pdf':
+                # PDF 文件：使用 input_file 类型（OpenAI API 支持）
+                try:
+                    with open(resolved_file_path, "rb") as f:
+                        file_bytes = f.read()
+                        file_content_b64 = base64.b64encode(file_bytes).decode("utf-8")
+                    
+                    # 创建 input_file 类型的消息内容（参考 Pdf.md 示例）
+                    file_content_item = {
+                        "type": "input_file",
+                        "file_data": f"data:application/pdf;base64,{file_content_b64}",
+                        "filename": file_name,
+                    }
+                except Exception as e:
+                    print(f"Warning: Failed to read PDF file {request.file_path} (解析后: {resolved_file_path}): {e}")
+                    file_content_item = None
+            else:
+                # 非 PDF 文件（Markdown、Word 等）：读取内容作为文本
+                try:
+                    from backend.tools.agent_as_tools.section_creators.utils import get_file_content
+                    # get_file_content 内部会解析路径，但我们已经解析过了，直接使用解析后的路径
+                    file_text_content = get_file_content(resolved_file_path)
+                    
+                    # 将文件内容添加到用户消息中
+                    file_info = f"\n\n**上传的文件：{file_name}**\n\n文件内容：\n```\n{file_text_content}\n```"
+                    user_message = user_message + file_info if user_message.strip() else f"请根据以下文件内容创建笔记本。{file_info}"
+                except Exception as e:
+                    print(f"Warning: Failed to read file content {request.file_path}: {e}")
+                    # Fallback to old method if file reading fails
+                    file_info = f"\n\n我需要上传文件并创建笔记本。\n文件路径：{request.file_path}\n文件名：{file_name}\n\n请调用 generate_outline 工具，参数为：\n- file_path: \"{request.file_path}\"\n- user_request: \"{user_message.strip() or '请根据文件内容创建笔记本'}\""
+                    user_message = user_message + file_info if user_message.strip() else f"请处理上传的文件并创建笔记本。{file_info}"
         
         # Create SQLiteSession for maintaining conversation context
         # This will automatically manage conversation history
@@ -352,191 +372,110 @@ async def source_chat_with_top_level_agent(request: SourceChatRequest):
 def _extract_response(result, user_message: str = None):
     """
     提取响应和结构化数据的辅助函数
-    根据响应内容智能判断消息类型，返回结构化的消息数据
+    TopLevelAgent 现在通过 structured output 返回 StructuredMessageData
     
     Args:
         result: Runner.run 的结果
-        user_message: 用户消息（用于判断上下文）
+        user_message: 用户消息（用于上下文，但不再用于判断消息类型）
     
     Returns:
         (response_text, structured_data): 响应文本和结构化数据
     """
-    response_text = None
     response_text = None
     structured_data = None
     
     if hasattr(result, 'final_output'):
         final_output = result.final_output
         
-        # Check if final_output is a structured object (Pydantic model or dict)
-        if isinstance(final_output, dict):
-            structured_data = _parse_structured_output(final_output, user_message)
-            response_text = _generate_user_friendly_message(final_output, structured_data)
-        elif hasattr(final_output, '__dict__'):
-            # Pydantic model or similar
+        # TopLevelAgent 现在返回 StructuredMessageData 对象
+        if isinstance(final_output, StructuredMessageData):
+            # 直接使用 Agent 返回的结构化数据
+            structured_data = final_output
+            response_text = structured_data.message
+        elif hasattr(final_output, 'model_dump'):
+            # Pydantic model - 尝试转换为 StructuredMessageData
             try:
-                # Try to convert to dict
-                if hasattr(final_output, 'model_dump'):
-                    output_dict = final_output.model_dump()
-                elif hasattr(final_output, 'dict'):
-                    output_dict = final_output.dict()
-                else:
-                    output_dict = final_output.__dict__
-                
-                structured_data = _parse_structured_output(output_dict, user_message)
-                response_text = _generate_user_friendly_message(output_dict, structured_data)
-            except:
-                response_text = str(final_output)
+                output_dict = final_output.model_dump()
+                structured_data = StructuredMessageData(**output_dict)
+                response_text = structured_data.message
+            except Exception as e:
+                print(f"Warning: Failed to parse structured output: {e}")
+                # Fallback: 尝试从工具返回的 JSON 中提取（如 generate_outline）
+                response_text, structured_data = _handle_tool_output(final_output)
+        elif isinstance(final_output, dict):
+            # 字典格式 - 尝试转换为 StructuredMessageData
+            try:
+                structured_data = StructuredMessageData(**final_output)
+                response_text = structured_data.message
+            except Exception as e:
+                print(f"Warning: Failed to parse structured output dict: {e}")
+                # Fallback: 尝试从工具返回的 JSON 中提取（如 generate_outline）
+                response_text, structured_data = _handle_tool_output(final_output)
         else:
-            # Try to parse as JSON string (from create_notebook or generate_outline tool)
-            try:
-                if isinstance(final_output, str):
-                    # 尝试解析 JSON 字符串
-                    parsed = json.loads(final_output)
-                    if isinstance(parsed, dict):
-                        structured_data = _parse_structured_output(parsed, user_message)
-                        response_text = _generate_user_friendly_message(parsed, structured_data)
-                    else:
-                        response_text = final_output
-                else:
-                    response_text = str(final_output)
-            except (json.JSONDecodeError, ValueError):
-                # 不是 JSON，尝试从文本中提取结构化信息
-                response_text = str(final_output)
-                structured_data = _parse_text_for_structure(response_text, user_message)
+            # 字符串或其他格式 - 可能是工具返回的 JSON 字符串
+            response_text, structured_data = _handle_tool_output(final_output)
     else:
         response_text = str(result)
-        structured_data = _parse_text_for_structure(response_text, user_message)
     
     return response_text, structured_data
 
-def _parse_structured_output(output_dict: dict, user_message: str = None) -> Optional[StructuredMessageData]:
+def _handle_tool_output(final_output) -> tuple:
     """
-    解析结构化输出，判断消息类型
+    处理工具返回的输出（如 generate_outline 返回的 JSON 字符串）
     
     Args:
-        output_dict: 输出字典
-        user_message: 用户消息（用于上下文判断）
+        final_output: 工具返回的输出
     
     Returns:
-        StructuredMessageData 对象或 None
+        (response_text, structured_data): 响应文本和结构化数据
     """
-    # 检查是否是笔记本创建结果
-    if 'notebook_id' in output_dict and 'notebook_title' in output_dict:
-        return StructuredMessageData(
-            message_type=MessageType.NOTEBOOK_CREATED,
-            notebook_id=output_dict.get('notebook_id'),
-            notebook_title=output_dict.get('notebook_title')
-        )
+    # 尝试解析 JSON 字符串（工具可能返回 JSON）
+    try:
+        if isinstance(final_output, str):
+            parsed = json.loads(final_output)
+            if isinstance(parsed, dict):
+                # 检查是否是工具返回的格式（如 generate_outline 返回的格式）
+                if parsed.get('type') == 'outline' and 'outline' in parsed:
+                    # 工具返回的大纲格式
+                    outline_data = parsed.get('outline')
+                    message_text = parsed.get('message', '📋 我已经为您生成了笔记本大纲，请查看并确认。')
+                    structured_data = StructuredMessageData(
+                        message_type=MessageType.OUTLINE,
+                        message=message_text,
+                        outline=outline_data if isinstance(outline_data, dict) else {'outlines': outline_data},
+                        file_path=parsed.get('file_path'),
+                        user_request=parsed.get('user_request')
+                    )
+                    return message_text, structured_data
+                elif 'notebook_id' in parsed and 'notebook_title' in parsed:
+                    # 工具返回的笔记本创建格式
+                    notebook_title = parsed.get('notebook_title')
+                    notebook_id = parsed.get('notebook_id')
+                    message_text = f"✅ 已成功创建笔记本！\n\n**标题：** {notebook_title}\n**ID：** {notebook_id}"
+                    structured_data = StructuredMessageData(
+                        message_type=MessageType.NOTEBOOK_CREATED,
+                        message=message_text,
+                        notebook_id=notebook_id,
+                        notebook_title=notebook_title
+                    )
+                    return message_text, structured_data
+                else:
+                    # 尝试直接转换为 StructuredMessageData
+                    try:
+                        # 如果没有 message 字段，使用默认值
+                        if 'message' not in parsed:
+                            parsed['message'] = str(parsed)
+                        structured_data = StructuredMessageData(**parsed)
+                        return structured_data.message, structured_data
+                    except:
+                        pass
+    except (json.JSONDecodeError, ValueError):
+        pass
     
-    # 检查是否是大纲生成结果
-    if output_dict.get('type') == 'outline' and 'outline' in output_dict:
-        return StructuredMessageData(
-            message_type=MessageType.OUTLINE,
-            outline=output_dict.get('outline'),
-            file_path=output_dict.get('file_path'),
-            user_request=output_dict.get('user_request')
-        )
-    
-    # 检查是否包含大纲结构（即使没有 type 字段）
-    if 'outline' in output_dict or 'outlines' in output_dict:
-        outline = output_dict.get('outline') or output_dict.get('outlines')
-        return StructuredMessageData(
-            message_type=MessageType.OUTLINE,
-            outline=outline if isinstance(outline, dict) else {'outlines': outline},
-            file_path=output_dict.get('file_path'),
-            user_request=output_dict.get('user_request')
-        )
-    
-    return None
+    # 如果无法解析，返回普通文本
+    return str(final_output), None
 
 
-def _parse_text_for_structure(text: str, user_message: str = None) -> Optional[StructuredMessageData]:
-    """
-    从文本中解析结构化信息
-    
-    Args:
-        text: 响应文本
-        user_message: 用户消息（用于上下文判断）
-    
-    Returns:
-        StructuredMessageData 对象或 None
-    """
-    # 检查是否包含题目关键词（用于识别题目）
-    question_keywords = ['题目', '问题', 'question', '题目内容', '题目文本', '题目原文']
-    if any(keyword in text.lower() for keyword in question_keywords):
-        # 尝试提取题目文本
-        question_match = re.search(r'题目[：:]\s*(.+?)(?:\n|$)', text, re.IGNORECASE)
-        if question_match:
-            return StructuredMessageData(
-                message_type=MessageType.QUESTION,
-                question_text=question_match.group(1).strip()
-            )
-    
-    # 检查是否包含笔记本创建信息
-    notebook_match = re.search(r'笔记本[：:]\s*ID[：:]\s*([^\n]+)\n.*标题[：:]\s*([^\n]+)', text)
-    if notebook_match:
-        return StructuredMessageData(
-            message_type=MessageType.NOTEBOOK_CREATED,
-            notebook_id=notebook_match.group(1).strip(),
-            notebook_title=notebook_match.group(2).strip()
-        )
-    
-    # 检查是否包含大纲（JSON代码块）
-    json_match = re.search(r'```json\s*([\s\S]*?)\s*```', text)
-    if json_match:
-        try:
-            parsed = json.loads(json_match.group(1))
-            if isinstance(parsed, dict) and ('outline' in parsed or 'outlines' in parsed):
-                return StructuredMessageData(
-                    message_type=MessageType.OUTLINE,
-                    outline=parsed.get('outline') or parsed.get('outlines'),
-                    file_path=parsed.get('file_path'),
-                    user_request=parsed.get('user_request')
-                )
-        except:
-            pass
-    
-    # 检查是否值得添加到笔记（包含定义、概念、解释等）
-    valuable_keywords = ['定义', '概念', '定理', '证明', '例子', '总结', '要点']
-    if any(keyword in text for keyword in valuable_keywords) and len(text) > 100:
-        return StructuredMessageData(
-            message_type=MessageType.ADD_TO_NOTEBOOK,
-            content_summary=text[:200] + "..." if len(text) > 200 else text
-        )
-    
-    return None
-
-
-def _generate_user_friendly_message(output_dict: dict, structured_data: Optional[StructuredMessageData] = None) -> str:
-    """
-    根据结构化数据生成用户友好的消息文本
-    
-    Args:
-        output_dict: 输出字典
-        structured_data: 结构化数据
-    
-    Returns:
-        用户友好的消息文本
-    """
-    if structured_data:
-        if structured_data.message_type == MessageType.NOTEBOOK_CREATED:
-            return f"✅ 已成功创建笔记本！\n\n**标题：** {structured_data.notebook_title}\n**ID：** {structured_data.notebook_id}"
-        
-        elif structured_data.message_type == MessageType.OUTLINE:
-            # 使用工具返回的消息，如果没有则生成默认消息
-            if 'message' in output_dict:
-                return output_dict['message']
-            return "📋 我已经为您生成了笔记本大纲，请查看并确认。"
-        
-        elif structured_data.message_type == MessageType.QUESTION:
-            return output_dict.get('message', str(output_dict))
-        
-        elif structured_data.message_type == MessageType.ADD_TO_NOTEBOOK:
-            return str(output_dict)
-    
-    # 默认返回原始输出
-    return str(output_dict)
 
 
 @router.post("/sessions", response_model=SessionResponse)

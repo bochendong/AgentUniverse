@@ -31,6 +31,7 @@ class MessageType(str, Enum):
 class StructuredMessageData(BaseModel):
     """结构化消息数据 - 用于前端根据消息类型渲染不同的UI"""
     message_type: MessageType = Field(..., description="消息类型，用于前端判断如何渲染UI")
+    message: str = Field(..., description="用户友好的消息文本，支持 Markdown 格式（包括数学公式、代码块等）")
     
     # 大纲相关字段（message_type = "outline"）
     outline: Optional[Dict] = Field(None, description="大纲内容（当 message_type 为 outline 时）")

@@ -78,6 +78,13 @@ export const uploadFile = (file) => {
   })
 }
 
+// Get File Content
+export const getFileContent = (filePath) => {
+  return api.get('/api/file-content', {
+    params: { file_path: filePath }
+  })
+}
+
 // Notebook Creation
 export const confirmOutlineAndCreateNotebook = (userRequest, outline, filePath = null, sessionId = null) => {
   return api.post('/api/notebooks/confirm-outline-and-create', {

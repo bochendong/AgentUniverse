@@ -78,49 +78,49 @@ function HomePage() {
       icon: <BrainIcon sx={{ fontSize: 48 }} />,
       title: '智能代理',
       description: '强大的AI代理系统，能够理解复杂任务并自动执行。支持自然语言交互，智能决策和任务分解。',
-      color: '#9333EA',
+      color: '#00D9FF',
     },
     {
       icon: <CodeIcon sx={{ fontSize: 48 }} />,
       title: '工具集成',
       description: '丰富的工具生态系统，支持各种功能扩展。轻松集成第三方API、数据库和自定义工具。',
-      color: '#3B82F6',
+      color: '#0099FF',
     },
     {
       icon: <RobotIcon sx={{ fontSize: 48 }} />,
       title: '自主协作',
       description: '多个代理可以自主协作，完成复杂工作流。智能任务分配和结果汇总，实现高效团队协作。',
-      color: '#10B981',
+      color: '#00FFCC',
     },
     {
       icon: <SparklesIcon sx={{ fontSize: 48 }} />,
       title: '智能编排',
       description: '自动编排多个代理的工作流程，优化执行顺序和资源分配。支持条件分支和循环控制。',
-      color: '#F59E0B',
+      color: '#00FFFF',
     },
     {
       icon: <ExtensionIcon sx={{ fontSize: 48 }} />,
       title: '插件系统',
       description: '灵活的插件架构，支持自定义功能扩展。开发者可以轻松创建和分享自己的插件。',
-      color: '#EC4899',
+      color: '#0099CC',
     },
     {
       icon: <HubIcon sx={{ fontSize: 48 }} />,
       title: '中心化管理',
       description: '统一的代理管理中心，监控所有代理的状态和性能。提供详细的日志和追踪功能。',
-      color: '#8B5CF6',
+      color: '#0066FF',
     },
     {
       icon: <SecurityIcon sx={{ fontSize: 48 }} />,
       title: '安全可靠',
       description: '企业级安全保障，支持权限控制和数据加密。确保代理操作的安全性和合规性。',
-      color: '#EF4444',
+      color: '#00AAFF',
     },
     {
       icon: <SpeedIcon sx={{ fontSize: 48 }} />,
       title: '高性能',
       description: '优化的执行引擎，支持并发处理和异步操作。快速响应，高效处理大量任务。',
-      color: '#06B6D4',
+      color: '#00D9FF',
     },
   ]
 
@@ -166,8 +166,8 @@ function HomePage() {
         overflowX: 'hidden',
         overflowY: 'auto',
         background: isDark
-          ? '#0a0a0f'
-          : '#f8f9fa',
+          ? 'linear-gradient(135deg, #0a0e27 0%, #1a1f3a 50%, #0d1117 100%)'
+          : 'linear-gradient(135deg, #f0f4f8 0%, #e6f0f7 50%, #fafcff 100%)',
       }}
     >
       {/* Section 1: Hero */}
@@ -211,11 +211,12 @@ function HomePage() {
                     transform: titleVisible ? 'translateY(0)' : 'translateY(30px)',
                     transition: `all 0.6s ease ${index * 0.1}s`,
                     '&:hover': {
-                      background: 'linear-gradient(135deg, #9333EA 0%, #3B82F6 100%)',
+                      background: 'linear-gradient(135deg, #00D9FF 0%, #0099FF 50%, #0066FF 100%)',
                       backgroundClip: 'text',
                       WebkitBackgroundClip: 'text',
                       WebkitTextFillColor: 'transparent',
                       transform: 'scale(1.05)',
+                      textShadow: '0 0 30px rgba(0, 217, 255, 0.5)',
                     },
                   }}
                 >
@@ -265,16 +266,16 @@ function HomePage() {
                   px: 5,
                   py: 2,
                   fontSize: '1.1rem',
-                  background: 'linear-gradient(135deg, #9333EA 0%, #3B82F6 100%)',
+                  background: 'linear-gradient(135deg, #00D9FF 0%, #0099FF 50%, #0066FF 100%)',
                   color: '#FFFFFF',
                   fontWeight: 600,
                   borderRadius: '50px',
-                  boxShadow: '0 10px 40px rgba(147, 51, 234, 0.4)',
+                  boxShadow: '0 10px 40px rgba(0, 217, 255, 0.4), 0 0 20px rgba(0, 153, 255, 0.3)',
                   textTransform: 'none',
                   '&:hover': {
                     transform: 'translateY(-3px) scale(1.05)',
-                    boxShadow: '0 15px 50px rgba(147, 51, 234, 0.6)',
-                    background: 'linear-gradient(135deg, #7c2dd2 0%, #2563eb 100%)',
+                    boxShadow: '0 15px 50px rgba(0, 217, 255, 0.6), 0 0 30px rgba(0, 153, 255, 0.5)',
+                    background: 'linear-gradient(135deg, #00FFFF 0%, #00AAFF 50%, #0077FF 100%)',
                   },
                   transition: 'all 0.3s ease',
                 }}
@@ -290,22 +291,24 @@ function HomePage() {
                   px: 5,
                   py: 2,
                   fontSize: '1.1rem',
-                  borderColor: isDark ? 'rgba(147, 51, 234, 0.5)' : 'rgba(147, 51, 234, 0.3)',
-                  color: isDark ? '#FFFFFF' : '#9333EA',
+                  borderColor: isDark ? 'rgba(0, 217, 255, 0.5)' : 'rgba(0, 153, 255, 0.4)',
+                  color: isDark ? '#00D9FF' : '#0066FF',
                   fontWeight: 600,
                   borderRadius: '50px',
                   borderWidth: 2,
                   backdropFilter: 'blur(10px)',
                   background: isDark
-                    ? 'rgba(147, 51, 234, 0.1)'
-                    : 'rgba(147, 51, 234, 0.05)',
+                    ? 'rgba(0, 217, 255, 0.1)'
+                    : 'rgba(0, 153, 255, 0.05)',
                   textTransform: 'none',
+                  boxShadow: isDark ? '0 0 20px rgba(0, 217, 255, 0.2)' : 'none',
                   '&:hover': {
                     borderWidth: 2,
                     background: isDark
-                      ? 'rgba(147, 51, 234, 0.2)'
-                      : 'rgba(147, 51, 234, 0.1)',
+                      ? 'rgba(0, 217, 255, 0.2)'
+                      : 'rgba(0, 153, 255, 0.1)',
                     transform: 'translateY(-3px)',
+                    boxShadow: isDark ? '0 0 30px rgba(0, 217, 255, 0.4)' : '0 0 20px rgba(0, 153, 255, 0.3)',
                   },
                   transition: 'all 0.3s ease',
                 }}
@@ -341,7 +344,7 @@ function HomePage() {
               fontWeight: 800,
               mb: 8,
               textAlign: 'center',
-              background: 'linear-gradient(135deg, #9333EA 0%, #3B82F6 100%)',
+              background: 'linear-gradient(135deg, #00D9FF 0%, #0099FF 50%, #0066FF 100%)',
               backgroundClip: 'text',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
@@ -364,8 +367,8 @@ function HomePage() {
                     : 'rgba(255, 255, 255, 0.8)',
                   backdropFilter: 'blur(20px)',
                   border: isDark
-                    ? '1px solid rgba(147, 51, 234, 0.2)'
-                    : '1px solid rgba(0, 0, 0, 0.1)',
+                    ? '1px solid rgba(0, 217, 255, 0.2)'
+                    : '1px solid rgba(0, 102, 255, 0.15)',
                   borderRadius: '20px',
                   p: 3,
                   transition: 'all 0.4s ease',
@@ -381,8 +384,8 @@ function HomePage() {
                   '&:hover': {
                     transform: 'translateY(-15px)',
                     boxShadow: isDark
-                      ? `0 25px 70px rgba(147, 51, 234, 0.4)`
-                      : `0 25px 70px rgba(147, 51, 234, 0.2)`,
+                      ? `0 25px 70px rgba(0, 217, 255, 0.4), 0 0 40px rgba(0, 153, 255, 0.3)`
+                      : `0 25px 70px rgba(0, 153, 255, 0.2)`,
                     borderColor: feature.color,
                     background: isDark
                       ? 'rgba(255, 255, 255, 0.08)'
@@ -470,7 +473,7 @@ function HomePage() {
               fontWeight: 800,
               mb: 8,
               textAlign: 'center',
-              background: 'linear-gradient(135deg, #9333EA 0%, #3B82F6 100%)',
+              background: 'linear-gradient(135deg, #00D9FF 0%, #0099FF 50%, #0066FF 100%)',
               backgroundClip: 'text',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
@@ -493,8 +496,8 @@ function HomePage() {
                     : 'rgba(255, 255, 255, 0.8)',
                   backdropFilter: 'blur(20px)',
                   border: isDark
-                    ? '1px solid rgba(147, 51, 234, 0.2)'
-                    : '1px solid rgba(0, 0, 0, 0.1)',
+                    ? '1px solid rgba(0, 217, 255, 0.2)'
+                    : '1px solid rgba(0, 102, 255, 0.15)',
                   borderRadius: '20px',
                   p: 4,
                   textAlign: 'center',
@@ -508,15 +511,15 @@ function HomePage() {
                   '&:hover': {
                     transform: 'translateY(-10px)',
                     boxShadow: isDark
-                      ? '0 20px 60px rgba(147, 51, 234, 0.3)'
-                      : '0 20px 60px rgba(147, 51, 234, 0.15)',
+                      ? '0 20px 60px rgba(0, 217, 255, 0.3), 0 0 30px rgba(0, 153, 255, 0.2)'
+                      : '0 20px 60px rgba(0, 153, 255, 0.15)',
                   },
                   transition: 'all 0.3s ease',
                 }}
               >
                 <Box
                   sx={{
-                    color: '#9333EA',
+                    color: '#00D9FF',
                     mb: 2,
                     display: 'flex',
                     justifyContent: 'center',
@@ -571,8 +574,9 @@ function HomePage() {
               <ArchitectureIcon
                 sx={{
                   fontSize: 80,
-                  color: '#9333EA',
+                  color: '#00D9FF',
                   mb: 3,
+                  filter: 'drop-shadow(0 0 10px rgba(0, 217, 255, 0.5))',
                 }}
               />
               <Typography
@@ -581,7 +585,7 @@ function HomePage() {
                   fontSize: { xs: '2rem', md: '3rem' },
                   fontWeight: 800,
                   mb: 3,
-                  background: 'linear-gradient(135deg, #9333EA 0%, #3B82F6 100%)',
+                  background: 'linear-gradient(135deg, #00D9FF 0%, #0099FF 50%, #0066FF 100%)',
                   backgroundClip: 'text',
                   WebkitBackgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
@@ -608,10 +612,11 @@ function HomePage() {
                     label={tag}
                     sx={{
                       background: isDark
-                        ? 'rgba(147, 51, 234, 0.2)'
-                        : 'rgba(147, 51, 234, 0.1)',
-                      color: '#9333EA',
+                        ? 'rgba(0, 217, 255, 0.2)'
+                        : 'rgba(0, 153, 255, 0.1)',
+                      color: '#00D9FF',
                       fontWeight: 600,
+                      border: isDark ? '1px solid rgba(0, 217, 255, 0.3)' : 'none',
                     }}
                   />
                 ))}
@@ -662,7 +667,7 @@ function HomePage() {
                   <CheckCircleIcon
                     sx={{
                       fontSize: 20,
-                      color: '#10B981',
+                      color: '#00FFCC',
                     }}
                   />
                   <Typography
@@ -702,8 +707,9 @@ function HomePage() {
           <IntegrationIcon
             sx={{
               fontSize: 80,
-              color: '#3B82F6',
+              color: '#0099FF',
               mb: 3,
+              filter: 'drop-shadow(0 0 10px rgba(0, 153, 255, 0.5))',
             }}
           />
           <Typography
@@ -712,7 +718,7 @@ function HomePage() {
               fontSize: { xs: '2rem', md: '3rem' },
               fontWeight: 800,
               mb: 3,
-              background: 'linear-gradient(135deg, #9333EA 0%, #3B82F6 100%)',
+              background: 'linear-gradient(135deg, #00D9FF 0%, #0099FF 50%, #0066FF 100%)',
               backgroundClip: 'text',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
@@ -752,8 +758,8 @@ function HomePage() {
                     ? 'rgba(255, 255, 255, 0.05)'
                     : 'rgba(255, 255, 255, 0.8)',
                   border: isDark
-                    ? '1px solid rgba(147, 51, 234, 0.2)'
-                    : '1px solid rgba(0, 0, 0, 0.1)',
+                    ? '1px solid rgba(0, 217, 255, 0.2)'
+                    : '1px solid rgba(0, 102, 255, 0.15)',
                   borderRadius: '15px',
                   opacity: 0,
                   transform: 'translateY(50px)',
@@ -764,7 +770,8 @@ function HomePage() {
                   },
                   '&:hover': {
                     transform: 'translateY(-5px)',
-                    borderColor: '#3B82F6',
+                    borderColor: '#0099FF',
+                    boxShadow: isDark ? '0 0 20px rgba(0, 153, 255, 0.3)' : '0 0 15px rgba(0, 153, 255, 0.2)',
                   },
                   transition: 'all 0.3s ease',
                 }}
@@ -815,8 +822,9 @@ function HomePage() {
           <SpeedIcon
             sx={{
               fontSize: 80,
-              color: '#10B981',
+              color: '#00FFCC',
               mb: 3,
+              filter: 'drop-shadow(0 0 10px rgba(0, 255, 204, 0.5))',
             }}
           />
           <Typography
@@ -825,7 +833,7 @@ function HomePage() {
               fontSize: { xs: '2rem', md: '3rem' },
               fontWeight: 800,
               mb: 3,
-              background: 'linear-gradient(135deg, #9333EA 0%, #3B82F6 100%)',
+              background: 'linear-gradient(135deg, #00D9FF 0%, #0099FF 50%, #0066FF 100%)',
               backgroundClip: 'text',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
@@ -853,8 +861,8 @@ function HomePage() {
                     ? 'rgba(255, 255, 255, 0.05)'
                     : 'rgba(255, 255, 255, 0.8)',
                   border: isDark
-                    ? '1px solid rgba(147, 51, 234, 0.2)'
-                    : '1px solid rgba(0, 0, 0, 0.1)',
+                    ? '1px solid rgba(0, 217, 255, 0.2)'
+                    : '1px solid rgba(0, 102, 255, 0.15)',
                   borderRadius: '20px',
                   opacity: 0,
                   transform: 'translateY(50px)',
@@ -865,7 +873,8 @@ function HomePage() {
                   },
                   '&:hover': {
                     transform: 'scale(1.05)',
-                    borderColor: '#10B981',
+                    borderColor: '#00FFCC',
+                    boxShadow: isDark ? '0 0 25px rgba(0, 255, 204, 0.4)' : '0 0 20px rgba(0, 255, 204, 0.3)',
                   },
                   transition: 'all 0.3s ease',
                 }}
@@ -875,7 +884,7 @@ function HomePage() {
                   sx={{
                     fontWeight: 900,
                     mb: 1,
-                    background: 'linear-gradient(135deg, #9333EA 0%, #3B82F6 100%)',
+                    background: 'linear-gradient(135deg, #00D9FF 0%, #0099FF 50%, #0066FF 100%)',
                     backgroundClip: 'text',
                     WebkitBackgroundClip: 'text',
                     WebkitTextFillColor: 'transparent',
@@ -923,7 +932,7 @@ function HomePage() {
               fontSize: { xs: '2rem', md: '3rem' },
               fontWeight: 800,
               mb: 3,
-              background: 'linear-gradient(135deg, #9333EA 0%, #3B82F6 100%)',
+              background: 'linear-gradient(135deg, #00D9FF 0%, #0099FF 50%, #0066FF 100%)',
               backgroundClip: 'text',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
@@ -945,8 +954,8 @@ function HomePage() {
                     ? 'rgba(255, 255, 255, 0.05)'
                     : 'rgba(255, 255, 255, 0.8)',
                   border: isDark
-                    ? '1px solid rgba(147, 51, 234, 0.2)'
-                    : '1px solid rgba(0, 0, 0, 0.1)',
+                    ? '1px solid rgba(0, 217, 255, 0.2)'
+                    : '1px solid rgba(0, 102, 255, 0.15)',
                   borderRadius: '15px',
                   display: 'flex',
                   alignItems: 'center',
@@ -960,7 +969,8 @@ function HomePage() {
                   },
                   '&:hover': {
                     transform: 'translateX(10px)',
-                    borderColor: '#9333EA',
+                    borderColor: '#00D9FF',
+                    boxShadow: isDark ? '0 0 20px rgba(0, 217, 255, 0.3)' : '0 0 15px rgba(0, 217, 255, 0.2)',
                   },
                   transition: 'all 0.3s ease',
                 }}
@@ -968,8 +978,9 @@ function HomePage() {
                 <CheckCircleIcon
                   sx={{
                     fontSize: 28,
-                    color: '#10B981',
+                    color: '#00FFCC',
                     flexShrink: 0,
+                    filter: 'drop-shadow(0 0 5px rgba(0, 255, 204, 0.5))',
                   }}
                 />
                 <Typography
@@ -1021,11 +1032,14 @@ function HomePage() {
             >
               <Box
                 sx={{
-                  color: '#9333EA',
+                  color: '#00D9FF',
                   mb: 2,
                   display: 'flex',
                   justifyContent: 'center',
                   fontSize: '3rem',
+                  '& svg': {
+                    filter: 'drop-shadow(0 0 15px rgba(0, 217, 255, 0.6))',
+                  },
                 }}
               >
                 {stat.icon}
@@ -1036,7 +1050,7 @@ function HomePage() {
                   fontWeight: 900,
                   mb: 1,
                   fontSize: { xs: '2.5rem', md: '4rem' },
-                  background: 'linear-gradient(135deg, #9333EA 0%, #3B82F6 100%)',
+                  background: 'linear-gradient(135deg, #00D9FF 0%, #0099FF 50%, #0066FF 100%)',
                   backgroundClip: 'text',
                   WebkitBackgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',

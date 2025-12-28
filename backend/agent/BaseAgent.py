@@ -42,6 +42,7 @@ class BaseAgent(Agent):
         sub_agent_ids: Optional[List[str]] = None,
         parent_agent_id: Optional[str] = None,
         DB_PATH: Optional[str] = None,
+        output_type=None,
     ):
         """
         Initialize the base agent.
@@ -84,7 +85,8 @@ class BaseAgent(Agent):
             instructions=instructions,
             tools=tools or [],
             mcp_config=mcp_config or {},
-            model=model_name
+            model=model_name,
+            output_type=output_type
         )
     
     def _get_db_manager(self) -> AgentDBManager:

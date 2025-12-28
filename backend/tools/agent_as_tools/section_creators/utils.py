@@ -1,14 +1,60 @@
 """Section Creator Utilities - 工具函数"""
 
 import os
+from pathlib import Path
 from typing import Optional, Tuple, Literal
+
+
+def _resolve_file_path(file_path: str) -> str:
+    """
+    解析文件路径，处理相对路径和仅文件名的情况
+    
+    Args:
+        file_path: 文件路径（可以是绝对路径、相对路径或文件名）
+        
+    Returns:
+        解析后的文件路径（绝对路径）
+    """
+    # 如果是绝对路径且文件存在，直接返回
+    if os.path.isabs(file_path) and os.path.exists(file_path):
+        return file_path
+    
+    # 如果路径存在（相对路径），转换为绝对路径返回
+    if os.path.exists(file_path):
+        return os.path.abspath(file_path)
+    
+    # 获取项目根目录（假设utils.py在backend/tools/agent_as_tools/section_creators/目录下）
+    # backend/tools/agent_as_tools/section_creators/utils.py -> 项目根目录
+    current_file = Path(__file__)
+    project_root = current_file.parent.parent.parent.parent.parent  # 回到项目根目录
+    
+    # 尝试1: 相对于当前工作目录
+    if not os.path.isabs(file_path):
+        cwd_path = Path.cwd() / file_path
+        if cwd_path.exists():
+            return str(cwd_path.absolute())
+    
+    # 尝试2: 相对于项目根目录
+    root_path = project_root / file_path
+    if root_path.exists():
+        return str(root_path.absolute())
+    
+    # 尝试3: uploads目录下的文件（仅文件名的情况，这是最常见的情况）
+    uploads_dir = project_root / "uploads"
+    if uploads_dir.exists():
+        uploads_path = uploads_dir / file_path
+        if uploads_path.exists():
+            return str(uploads_path.absolute())
+    
+    # 如果都找不到，返回原始路径（让调用者处理错误）
+    return file_path
 
 
 def get_file_content(file_path: str) -> str:
     """读取文件内容，支持多种文件格式
     
     Args:
-        file_path: 文件路径
+        file_path: 文件路径（可以是绝对路径、相对路径或文件名）
         
     Returns:
         文件内容字符串
@@ -18,42 +64,45 @@ def get_file_content(file_path: str) -> str:
         ValueError: 路径不是文件
         IOError: 读取失败
     """
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"文件不存在: {file_path}")
+    # 尝试解析文件路径（处理相对路径和仅文件名的情况）
+    resolved_path = _resolve_file_path(file_path)
     
-    if not os.path.isfile(file_path):
-        raise ValueError(f"路径不是文件: {file_path}")
+    if not os.path.exists(resolved_path):
+        raise FileNotFoundError(f"文件不存在: {file_path} (解析后: {resolved_path})")
+    
+    if not os.path.isfile(resolved_path):
+        raise ValueError(f"路径不是文件: {file_path} (解析后: {resolved_path})")
     
     # 根据文件扩展名选择读取方式
-    file_ext = os.path.splitext(file_path)[1].lower()
+    file_ext = os.path.splitext(resolved_path)[1].lower()
     
     if file_ext == '.docx':
         try:
             from docx import Document
-            doc = Document(file_path)
+            doc = Document(resolved_path)
             content = '\n'.join([paragraph.text for paragraph in doc.paragraphs])
             return content
         except ImportError:
             raise ImportError("需要安装 python-docx 库来读取 .docx 文件: pip install python-docx")
         except Exception as e:
-            raise IOError(f"读取 .docx 文件失败: {file_path}, 错误: {str(e)}")
+            raise IOError(f"读取 .docx 文件失败: {resolved_path}, 错误: {str(e)}")
     
     elif file_ext in ['.md', '.txt', '.markdown']:
         # 读取文本文件
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(resolved_path, 'r', encoding='utf-8') as f:
                 content = f.read()
             return content
         except UnicodeDecodeError:
             # 尝试其他编码
             try:
-                with open(file_path, 'r', encoding='gbk') as f:
+                with open(resolved_path, 'r', encoding='gbk') as f:
                     content = f.read()
                 return content
             except Exception as e:
-                raise IOError(f"读取文件失败（编码问题）: {file_path}, 错误: {str(e)}")
+                raise IOError(f"读取文件失败（编码问题）: {resolved_path}, 错误: {str(e)}")
         except Exception as e:
-            raise IOError(f"读取文件失败: {file_path}, 错误: {str(e)}")
+            raise IOError(f"读取文件失败: {resolved_path}, 错误: {str(e)}")
     
     elif file_ext == '.pdf':
         # PDF 文件 - 使用agents库处理
@@ -71,21 +120,21 @@ def get_file_content(file_path: str) -> str:
                     import nest_asyncio
                     try:
                         nest_asyncio.apply()
-                        content = loop.run_until_complete(extract_pdf_content(file_path))
+                        content = loop.run_until_complete(extract_pdf_content(resolved_path))
                     except (ImportError, RuntimeError):
                         # 如果没有nest_asyncio或仍然失败，使用新的事件循环
-                        content = asyncio.run(extract_pdf_content(file_path))
+                        content = asyncio.run(extract_pdf_content(resolved_path))
                 else:
-                    content = loop.run_until_complete(extract_pdf_content(file_path))
+                    content = loop.run_until_complete(extract_pdf_content(resolved_path))
             except RuntimeError:
                 # 如果没有事件循环，创建一个新的
-                content = asyncio.run(extract_pdf_content(file_path))
+                content = asyncio.run(extract_pdf_content(resolved_path))
             
             return content
         except ImportError as e:
             raise ImportError(f"PDF处理功能需要agents库支持: {str(e)}")
         except Exception as e:
-            raise IOError(f"读取PDF文件失败: {file_path}, 错误: {str(e)}")
+            raise IOError(f"读取PDF文件失败: {resolved_path}, 错误: {str(e)}")
     
     elif file_ext in ['.pptx', '.ppt']:
         # PPT 文件（未来扩展）
@@ -99,7 +148,7 @@ def detect_file_type(file_path: Optional[str]) -> Optional[Literal['docx', 'md',
     """检测文件类型
     
     Args:
-        file_path: 文件路径
+        file_path: 文件路径（可以是绝对路径、相对路径或文件名）
         
     Returns:
         文件类型字符串，如果文件不存在或无法检测则返回 None
@@ -107,9 +156,16 @@ def detect_file_type(file_path: Optional[str]) -> Optional[Literal['docx', 'md',
     if not file_path:
         return None
     
+    # 尝试解析文件路径
+    try:
+        resolved_path = _resolve_file_path(file_path)
+        if not os.path.exists(resolved_path):
+            return None
+        file_ext = os.path.splitext(resolved_path)[1].lower()
+    except Exception:
+        # 如果解析失败，尝试直接使用原始路径
     if not os.path.exists(file_path):
         return None
-    
     file_ext = os.path.splitext(file_path)[1].lower()
     
     if file_ext == '.docx':

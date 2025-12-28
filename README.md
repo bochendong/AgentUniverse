@@ -62,7 +62,66 @@ TopLevelAgent → MasterAgent → NotebookAgent
 ### 环境要求
 - Python 3.13+
 - Node.js 18+
+- npm (通常随 Node.js 一起安装)
 - OpenAI API Key
+
+> **⚠️ 如果未安装 Node.js 和 npm：**
+> 
+> 运行 `./scripts/start_frontend.sh` 时，如果检测到 Node.js 或 npm 未安装，脚本会提示错误。请先按照下面的说明安装 Node.js 和 npm，然后再启动前端服务。
+
+### 安装依赖
+
+#### 安装 Node.js 和 npm
+
+如果您的系统尚未安装 Node.js 和 npm，请按照以下步骤安装：
+
+**macOS:**
+```bash
+# 使用 Homebrew 安装（推荐）
+brew install node
+
+# 或从官网下载安装包
+# 访问 https://nodejs.org/ 下载并安装
+```
+
+**Linux (Ubuntu/Debian):**
+```bash
+# 使用 apt 安装
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# 或使用 nvm (Node Version Manager)
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+nvm install 18
+nvm use 18
+```
+
+**Windows:**
+- 访问 [Node.js 官网](https://nodejs.org/) 下载 Windows 安装包
+- 运行安装程序，按照提示完成安装
+- npm 会随 Node.js 一起自动安装
+
+**验证安装:**
+```bash
+node --version  # 应显示 v18.x.x 或更高版本
+npm --version   # 应显示 9.x.x 或更高版本
+```
+
+#### 安装 Python 依赖
+
+```bash
+# 创建虚拟环境
+python3 -m venv venv
+
+# 激活虚拟环境
+# macOS/Linux:
+source venv/bin/activate
+# Windows:
+# venv\Scripts\activate
+
+# 安装依赖
+pip install -r requirements.txt
+```
 
 ### 一键启动
 
@@ -80,7 +139,10 @@ pip install -r requirements.txt
 cp .env.example .env
 
 # 启动服务
-./scripts/start_all.sh
+./scripts/start_backend.sh
+
+# 在另一个终端
+./scripts/start_frontend.sh
 ```
 
 访问 http://localhost:3001 开始使用！

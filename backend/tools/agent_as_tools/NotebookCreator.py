@@ -3,9 +3,11 @@
 使用 SectionCreatorRouter 根据文件类型和质量自动选择合适的章节创建器。
 """
 
+from __future__ import annotations
+
 import os
 import asyncio
-from typing import Optional, Dict
+from typing import Optional, Dict, Tuple
 from backend.models import Outline, Section
 from .section_creators import SectionCreatorRouter
 
@@ -59,27 +61,54 @@ class NotebookCreator:
         print(f"\n[NotebookCreator] 使用创建器类型: {creator_type}")
         print(f"[NotebookCreator] 开始创建 {total} 个章节...\n")
         
+        # 更新tracing系统显示进度
+        from backend.utils.tracing_collector import get_current_session_id, update_current_activity_message
+        session_id = get_current_session_id()
+        if session_id:
+            update_current_activity_message(session_id, f"NotebookCreator: 开始创建 {total} 个章节...")
+        
         # 并行创建所有章节
         async def create_section_with_logging(
             section_title: str,
             section_desc: str,
             idx: int
-        ) -> tuple[str, Optional[Section], Optional[Exception]]:
+        ) -> Tuple[str, Optional[Section], Optional[Exception]]:
             """创建单个章节并返回结果"""
+            # 获取session_id（在函数内部获取，确保能访问到最新的context）
+            current_session_id = get_current_session_id()
             try:
-                print(f"[{idx}/{total}] 正在创建章节: {section_title}")
+                progress_msg = f"[{idx}/{total}] 正在创建章节: {section_title}"
+                print(progress_msg)
+                
+                # 更新tracing系统显示当前进度
+                if current_session_id:
+                    update_current_activity_message(current_session_id, progress_msg)
+                
                 section_data = await creator.create_section(
                     section_title=section_title,
                     section_description=section_desc,
                     section_index=idx,
                     total_sections=total
                 )
-                print(f"[{idx}/{total}] ✓ 章节 '{section_title}' 创建完成\n")
+                
+                success_msg = f"[{idx}/{total}] ✓ 章节 '{section_title}' 创建完成"
+                print(f"{success_msg}\n")
+                
+                # 更新tracing系统显示完成进度
+                if current_session_id:
+                    update_current_activity_message(current_session_id, success_msg)
+                
                 return (section_title, section_data, None)
             except Exception as e:
                 import traceback
                 error_trace = traceback.format_exc()
-                print(f"[{idx}/{total}] ✗ 章节 '{section_title}' 创建失败: {e}\n{error_trace}\n")
+                error_msg = f"[{idx}/{total}] ✗ 章节 '{section_title}' 创建失败: {e}"
+                print(f"{error_msg}\n{error_trace}\n")
+                
+                # 更新tracing系统显示错误
+                if current_session_id:
+                    update_current_activity_message(current_session_id, error_msg)
+                
                 return (section_title, None, e)
         
         # 并行生成所有章节
@@ -97,7 +126,12 @@ class NotebookCreator:
             else:
                 print(f"  警告: 章节 '{section_title}' 未能成功生成，将被跳过")
         
-        print(f"\n[NotebookCreator] 章节创建完成，成功: {len(self.sections)}/{total}")
+        completion_msg = f"[NotebookCreator] 章节创建完成，成功: {len(self.sections)}/{total}"
+        print(f"\n{completion_msg}")
+        
+        # 更新tracing系统显示完成信息
+        if session_id:
+            update_current_activity_message(session_id, completion_msg)
         
         return self.sections
     

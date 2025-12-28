@@ -15,7 +15,7 @@ async def extract_pdf_content(file_path: str) -> str:
     参考 openai-cookbook/Pdf.md 的实现方式
     
     Args:
-        file_path: PDF文件路径
+        file_path: PDF文件路径（可以是绝对路径、相对路径或文件名）
         
     Returns:
         PDF内容的文本表示
@@ -25,23 +25,27 @@ async def extract_pdf_content(file_path: str) -> str:
         ValueError: 文件不是PDF格式
         Exception: 提取失败
     """
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"PDF文件不存在: {file_path}")
+    # 解析文件路径（支持相对路径和仅文件名）
+    from backend.tools.agent_as_tools.section_creators.utils import _resolve_file_path
+    resolved_path = _resolve_file_path(file_path)
     
-    if not os.path.isfile(file_path):
-        raise ValueError(f"路径不是文件: {file_path}")
+    if not os.path.exists(resolved_path):
+        raise FileNotFoundError(f"PDF文件不存在: {file_path} (解析后: {resolved_path})")
     
-    file_ext = os.path.splitext(file_path)[1].lower()
+    if not os.path.isfile(resolved_path):
+        raise ValueError(f"路径不是文件: {file_path} (解析后: {resolved_path})")
+    
+    file_ext = os.path.splitext(resolved_path)[1].lower()
     if file_ext != '.pdf':
         raise ValueError(f"文件不是PDF格式: {file_ext}")
     
     try:
         # 读取PDF文件并转换为base64
-        with open(file_path, "rb") as f:
+        with open(resolved_path, "rb") as f:
             pdf_bytes = f.read()
         
         b64_file = base64.b64encode(pdf_bytes).decode("utf-8")
-        filename = os.path.basename(file_path)
+        filename = os.path.basename(resolved_path)
         
         # 创建Agent用于提取PDF内容
         model_name = get_model_name()
