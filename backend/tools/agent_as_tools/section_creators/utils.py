@@ -164,9 +164,9 @@ def detect_file_type(file_path: Optional[str]) -> Optional[Literal['docx', 'md',
         file_ext = os.path.splitext(resolved_path)[1].lower()
     except Exception:
         # 如果解析失败，尝试直接使用原始路径
-    if not os.path.exists(file_path):
-        return None
-    file_ext = os.path.splitext(file_path)[1].lower()
+        if not os.path.exists(file_path):
+            return None
+        file_ext = os.path.splitext(file_path)[1].lower()
     
     if file_ext == '.docx':
         return 'docx'
