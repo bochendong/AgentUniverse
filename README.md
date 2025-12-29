@@ -269,6 +269,80 @@ AgentUniverse/
         <br>
         <sub><sup>Team Leader</sup></sub>
       </td>
+      <td align="center" valign="middle" width="128">
+        <a href="https://github.com/Audreyz7">
+          <img src="https://github.com/Audreyz7.png?size=128" />
+          <br>
+          Audreyz7
+        </a>
+        <br>
+        <sub><sup>Team Member</sup></sub>
+      </td>
+      <td align="center" valign="middle" width="128">
+        <a href="https://github.com/elenayyy-1218">
+          <img src="https://github.com/elenayyy-1218.png?size=128" />
+          <br>
+          Elena
+        </a>
+        <br>
+        <sub><sup>Team Member</sup></sub>
+      </td>
+      <td align="center" valign="middle" width="128">
+        <a href="https://github.com/Superb-947">
+          <img src="https://github.com/Superb-947.png?size=128" />
+          <br>
+          Yolo
+        </a>
+        <br>
+        <sub><sup>Team Member</sup></sub>
+      </td>
+    </tr>
+    <tr>
+      <td align="center" valign="middle" width="128">
+        <a href="https://github.com/kirisssss">
+          <img src="https://github.com/kirisssss.png?size=128" />
+          <br>
+          kirisssss
+        </a>
+        <br>
+        <sub><sup>Team Member</sup></sub>
+      </td>
+      <td align="center" valign="middle" width="128">
+        <a href="https://github.com/LuyifeiMi">
+          <img src="https://github.com/LuyifeiMi.png?size=128" />
+          <br>
+          LuyifeiMi
+        </a>
+        <br>
+        <sub><sup>Team Member</sup></sub>
+      </td>
+      <td align="center" valign="middle" width="128">
+        <a href="https://github.com/wangpenghan66-boop">
+          <img src="https://github.com/wangpenghan66-boop.png?size=128" />
+          <br>
+          Shark
+        </a>
+        <br>
+        <sub><sup>Team Member</sup></sub>
+      </td>
+      <td align="center" valign="middle" width="128">
+        <a href="https://github.com/Zhirui920">
+          <img src="https://github.com/Zhirui920.png?size=128" />
+          <br>
+          Zhirui
+        </a>
+        <br>
+        <sub><sup>Team Member</sup></sub>
+      </td>
+      <td align="center" valign="middle" width="128">
+        <a href="https://github.com/wangyeyu1129">
+          <img src="https://github.com/wangyeyu1129.png?size=128" />
+          <br>
+          wangyeyu1129
+        </a>
+        <br>
+        <sub><sup>Team Member</sup></sub>
+      </td>
     </tr>
   </tbody>
 </table>

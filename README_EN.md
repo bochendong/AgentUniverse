@@ -59,7 +59,66 @@ Each layer has its own responsibilities, working collaboratively to achieve inte
 ### Requirements
 - Python 3.13+
 - Node.js 18+
+- npm (usually comes with Node.js)
 - OpenAI API Key
+
+> **⚠️ If Node.js and npm are not installed:**
+> 
+> When running `./scripts/start_frontend.sh`, if Node.js or npm is not detected, the script will show an error. Please install Node.js and npm first following the instructions below, then start the frontend service.
+
+### Installing Dependencies
+
+#### Installing Node.js and npm
+
+If Node.js and npm are not installed on your system, please follow these steps:
+
+**macOS:**
+```bash
+# Install using Homebrew (recommended)
+brew install node
+
+# Or download from official website
+# Visit https://nodejs.org/ to download and install
+```
+
+**Linux (Ubuntu/Debian):**
+```bash
+# Install using apt
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# Or use nvm (Node Version Manager)
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+nvm install 18
+nvm use 18
+```
+
+**Windows:**
+- Visit [Node.js official website](https://nodejs.org/) to download Windows installer
+- Run the installer and follow the prompts
+- npm will be automatically installed with Node.js
+
+**Verify Installation:**
+```bash
+node --version  # Should show v18.x.x or higher
+npm --version   # Should show 9.x.x or higher
+```
+
+#### Installing Python Dependencies
+
+```bash
+# Create virtual environment
+python3 -m venv venv
+
+# Activate virtual environment
+# macOS/Linux:
+source venv/bin/activate
+# Windows:
+# venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+```
 
 ### One-Click Setup
 
@@ -77,7 +136,10 @@ pip install -r requirements.txt
 cp .env.example .env
 
 # Start services
-./scripts/start_all.sh
+./scripts/start_backend.sh
+
+# In another terminal
+./scripts/start_frontend.sh
 ```
 
 Visit http://localhost:3001 to get started!
@@ -203,6 +265,80 @@ Welcome to submit Issues and Pull Requests!
         </a>
         <br>
         <sub><sup>Team Leader</sup></sub>
+      </td>
+      <td align="center" valign="middle" width="128">
+        <a href="https://github.com/Audreyz7">
+          <img src="https://github.com/Audreyz7.png?size=128" />
+          <br>
+          Audreyz7
+        </a>
+        <br>
+        <sub><sup>Team Member</sup></sub>
+      </td>
+      <td align="center" valign="middle" width="128">
+        <a href="https://github.com/elenayyy-1218">
+          <img src="https://github.com/elenayyy-1218.png?size=128" />
+          <br>
+          Elena
+        </a>
+        <br>
+        <sub><sup>Team Member</sup></sub>
+      </td>
+      <td align="center" valign="middle" width="128">
+        <a href="https://github.com/Superb-947">
+          <img src="https://github.com/Superb-947.png?size=128" />
+          <br>
+          Yolo
+        </a>
+        <br>
+        <sub><sup>Team Member</sup></sub>
+      </td>
+    </tr>
+    <tr>
+      <td align="center" valign="middle" width="128">
+        <a href="https://github.com/kirisssss">
+          <img src="https://github.com/kirisssss.png?size=128" />
+          <br>
+          kirisssss
+        </a>
+        <br>
+        <sub><sup>Team Member</sup></sub>
+      </td>
+      <td align="center" valign="middle" width="128">
+        <a href="https://github.com/LuyifeiMi">
+          <img src="https://github.com/LuyifeiMi.png?size=128" />
+          <br>
+          LuyifeiMi
+        </a>
+        <br>
+        <sub><sup>Team Member</sup></sub>
+      </td>
+      <td align="center" valign="middle" width="128">
+        <a href="https://github.com/wangpenghan66-boop">
+          <img src="https://github.com/wangpenghan66-boop.png?size=128" />
+          <br>
+          Shark
+        </a>
+        <br>
+        <sub><sup>Team Member</sup></sub>
+      </td>
+      <td align="center" valign="middle" width="128">
+        <a href="https://github.com/Zhirui920">
+          <img src="https://github.com/Zhirui920.png?size=128" />
+          <br>
+          Zhirui
+        </a>
+        <br>
+        <sub><sup>Team Member</sup></sub>
+      </td>
+      <td align="center" valign="middle" width="128">
+        <a href="https://github.com/wangyeyu1129">
+          <img src="https://github.com/wangyeyu1129.png?size=128" />
+          <br>
+          wangyeyu1129
+        </a>
+        <br>
+        <sub><sup>Team Member</sup></sub>
       </td>
     </tr>
   </tbody>
